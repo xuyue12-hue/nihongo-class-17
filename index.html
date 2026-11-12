@@ -18,10 +18,10 @@ function showLogin(msg=''){$('app').innerHTML=`<div class="auth card"><h2>🌸 �
 async function loadUser(){let {data:{user:u},error}=await sb.auth.getUser();if(error||!u){showLogin();return}user=u;let r=await sb.from('profiles').select('id,full_name,role').eq('id',u.id).single();if(r.error||!r.data){$('app').innerHTML='<div class="auth card"><h2>プロフィール未登録</h2><p>教師にアカウント登録を依頼してください。</p><button onclick="logout()">ログアウト</button></div>';return}profile=r.data;await refresh()}
 async function logout(){await sb.auth.signOut();showLogin()}
 async function refresh(){let rs=await Promise.all([sb.from('materials').select('*').order('created_at',{ascending:false}),sb.from('assignments').select('*').order('created_at',{ascending:false}),sb.from('classes').select('*'),sb.from('submissions').select('*')]);for(let r of rs)if(r.error){warn(r.error);return} [materials,assignments,classes,submissions]=rs.map(r=>r.data);if(profile.role==='teacher'){let [p,m]=await Promise.all([sb.from('profiles').select('id,full_name,role').order('full_name'),sb.from('class_members').select('*')]);if(p.error||m.error)return warn(p.error||m.error);students=p.data.filter(x=>x.role==='student');members=m.data}else{let m=await sb.from('class_members').select('class_id').eq('student_id',user.id);members=m.data||[];assignments=assignments.filter(a=>members.some(x=>x.class_id===a.class_id));let results=await sb.rpc('get_my_results');if(!results.error)submissions=results.data.map(x=>({...x,student_id:user.id,score:x.score,answers:x.answers}))}await loadWritten();render()}
-const navs=()=>profile.role==='teacher'?[['home','ホーム'],['students','学生管理'],['materials','教材・問題'],['assignments','課題配信'],['written','記述式テスト'],['grades','成績管理']]:[['home','ホーム'],['study','言葉・文法'],['assignments','私の課題'],['written','記述式テスト'],['grades','成績']];
+const navs=()=>profile.role==='teacher'?[['home','ホーム'],['students','学生管理'],['materials','教材・問題'],['assignments','課題配信'],['written','記述式テスト'],['manage','課題管理'],['grades','成績管理']]:[['home','ホーム'],['study','言葉・文法'],['assignments','私の課題'],['written','記述式テスト'],['grades','成績']];
 function render(){let ns=navs();if(!ns.some(x=>x[0]===tab))tab='home';$('app').innerHTML=`<header><div><h1>🌸 日本語学習システム</h1><small>${esc(profile.full_name)} · ${profile.role==='teacher'?'教師':'学生'}</small></div><button class="logout" onclick="logout()">ログアウト</button></header><main class="wrap"><nav class="tabs" id="nav">${ns.map(([k,t])=>`<button class="${tab===k?'active':''}" onclick="go('${k}')">${t}</button>`).join('')}</nav><section id="screen"></section></main><div class="bottom" id="bottom">${ns.slice(0,4).map(([k,t])=>`<button class="${tab===k?'active':''}" onclick="go('${k}')">${t}</button>`).join('')}</div>`;$('screen').innerHTML=profile.role==='teacher'?teacher():student();restoreTeacherDraft()}
 function go(k){tab=k;opened=null;render()}
-function teacher(){if(tab==='written')return writtenTeacher();if(tab==='home')return `<h2>教師ダッシュボード</h2><div class="grid"><div class="metric"><strong>${students.length}</strong>登録学生</div><div class="metric"><strong>${assignments.length}</strong>配信課題</div><div class="metric"><strong>${submissions.length}</strong>提出件数</div></div><div class="card"><h3>クラス管理</h3><p>学生名の変更、教材登録、課題の配信、提出状況の確認ができます。</p><button class="primary" onclick="go('assignments')">課題を作成</button></div>`;
+function teacher(){if(tab==='manage')return manageTeacher();if(tab==='written')return writtenTeacher();if(tab==='home')return `<h2>教師ダッシュボード</h2><div class="grid"><div class="metric"><strong>${students.length}</strong>登録学生</div><div class="metric"><strong>${assignments.length}</strong>配信課題</div><div class="metric"><strong>${submissions.length}</strong>提出件数</div></div><div class="card"><h3>クラス管理</h3><p>学生名の変更、教材登録、課題の配信、提出状況の確認ができます。</p><button class="primary" onclick="go('assignments')">課題を作成</button></div>`;
 if(tab==='students')return `<h2>学生管理</h2><div class="card"><p class="notice">ログインアカウントの新規作成は Supabase Authentication で行い、profiles と class_members に登録してください。氏名の編集はここからできます。</p>${students.map(s=>`<div class="row" style="padding:12px 0;border-top:1px solid #eee"><strong>${esc(s.full_name)}</strong><button onclick="rename('${s.id}')">氏名編集</button></div>`).join('')||'学生が登録されていません。'}</div>`;
 if(tab==='materials')return `<h2>教材・問題</h2><div class="card"><h3>教材を追加</h3><label>種類</label><select id="mk"><option value="vocab">言葉</option><option value="grammar">文法</option></select><label>項目</label><input id="mt"><label>読み方・接続</label><input id="mr"><label>意味・説明</label><textarea id="mm"></textarea><label>例文</label><textarea id="me"></textarea><button class="primary" onclick="addMaterial()">保存</button></div>${materials.map(m=>`<div class="card"><span class="pill">${m.kind==='vocab'?'言葉':'文法'}</span><h3>${esc(m.term)}</h3><small>${esc(m.reading)}</small><p>${esc(m.meaning)}</p><p>${esc(m.example)}</p><button class="danger" onclick="delMaterial('${m.id}')">削除</button></div>`).join('')}`;
 if(tab==='assignments')return `<h2>課題配信</h2><div class="card"><h3>新しい課題</h3><div class="editor-grid"><div><label>配信クラス</label><select id="ac" onchange="saveTeacherDraft()">${classes.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div><div><label>課題名</label><input id="an" placeholder="例：N2 第1回" oninput="saveTeacherDraft()"></div></div><label>締切（日本時間）</label><input type="datetime-local" id="ad" onchange="saveTeacherDraft()"><div class="notice">提出は1回。正解と点数は締切後に公開されます。</div><div class="editor-actions"><button onclick="autoQuestions()">教材から問題を作成</button><button onclick="toggleBatch()">まとめて貼り付け</button><button class="danger" onclick="clearTeacherDraft()">草稿をクリア</button></div><div id="batchPanel" class="q-edit hidden"><h3>問題を一括追加</h3><p class="batch-help">1問につき6行（問題文、選択肢4行、正解番号）。問題同士は空行で区切ってください。</p><textarea id="batchText" style="min-height:180px" placeholder="「勉強」の意味は？&#10;学ぶこと&#10;寝ること&#10;遊ぶこと&#10;走ること&#10;1&#10;&#10;「早い」の反対は？&#10;遅い&#10;広い&#10;高い&#10;長い&#10;1"></textarea><button class="primary" onclick="importBatch()">一括追加</button></div><div class="q-edit"><h3 id="editorTitle">＋ 問題を追加</h3><label>問題文</label><textarea id="qp" placeholder="問題を入力してください" style="min-height:64px"></textarea><label>選択肢（左の丸を押して正解を指定）</label>${[0,1,2,3].map(i=>`<div class="choice"><input type="radio" name="correct" value="${i}" ${i===0?'checked':''} aria-label="選択肢${i+1}が正解"><input type="text" id="o${i}" placeholder="選択肢 ${i+1}"></div>`).join('')}<details><summary>解説を追加（任意）</summary><textarea id="qe" placeholder="解説"></textarea></details><div class="editor-actions"><button class="primary" onclick="addQuestion()" id="addQBtn">＋ 追加して次の問題へ</button><button onclick="resetQuestionEditor()">入力をクリア</button></div></div><div class="row"><h3>作成中：<span id="qCount">${questionsDraft.length}</span>問</h3><small>編集・複製・削除できます</small></div><div class="q-list" id="draftList">${draftQuestionList()}</div><div class="sticky-publish"><button class="primary wide" onclick="publish()">${questionsDraft.length}問を課題として配信</button></div></div><h3>配信済み</h3>${assignments.map(a=>`<div class="card"><strong>${esc(a.title)}</strong><p>締切：${fmt(a.deadline)} · ${closed(a)?'締切終了':'受付中'}</p></div>`).join('')}`;
@@ -147,6 +147,97 @@ async function writtenDeletePublished(id){
  if(r.error)return warn(r.error);
  if(!r.data?.length)return alert('削除できませんでした。Supabaseの権限を確認してください。');
  if(writtenPublishedEditing?.id===id)writtenPublishedEditing=null;
+ await refresh();alert('削除しました');
+}
+
+// 統合課題管理（既存データを保護する）
+function manageTeacher(){
+ const all=[...assignments.map(a=>({...a,_type:'choice'})),...writtenTests.map(t=>({...t,_type:'written'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+ return `<h2>課題管理</h2><p class="mutedtext">配信済みの選択式課題と記述式テストをまとめて管理できます。</p><div id="manageDetail"></div>${all.map(a=>{
+ const written=a._type==='written',count=written?writtenAnswers.filter(x=>x.test_id===a.id).length:submissions.filter(x=>x.assignment_id===a.id).length;
+ return `<div class="card"><div class="row"><strong>${esc(a.title)}</strong><span class="pill">${written?'記述式':'選択式'}</span></div><p class="mutedtext">締切：${fmt(a.deadline)} · ${closed(a)?'締切終了':'受付中'} · 提出 ${count}件</p><div class="stack"><button onclick="manageView('${a._type}','${a.id}')">詳細を見る</button><button onclick="manageEdit('${a._type}','${a.id}')">編集</button><button onclick="manageSubmissions('${a._type}','${a.id}')">提出状況</button><button class="danger" onclick="manageDelete('${a._type}','${a.id}')">削除</button></div></div>`}).join('')||'<div class="card">配信済み課題はありません。</div>'}`;
+}
+function manageShow(html){$('manageDetail').innerHTML=`<div class="card"><div class="row"><h3>課題詳細</h3><button onclick="$('manageDetail').innerHTML=''">閉じる</button></div>${html}</div>`;$('manageDetail').scrollIntoView({behavior:'smooth',block:'start'});}
+async function manageView(type,id){
+ if(profile.role!=='teacher')return;
+ if(type==='written'){
+  const t=writtenTests.find(x=>x.id===id);if(!t)return;
+  manageShow(`<h3>${esc(t.title)}</h3><p>締切：${fmt(t.deadline)}</p>${t.questions.map((q,i)=>`<div class="written-item"><strong>問題 ${i+1}｜${q.kind==='vocab'?'語彙':'作文'}</strong><p>${esc(q.prompt)}</p><p>正解・模範：${esc(q.kind==='vocab'?q.expected:q.explanation||'未設定')}</p></div>`).join('')}`);return;
+ }
+ const a=assignments.find(x=>x.id===id);if(!a)return;
+ // 選択式の問題取得は既存RPCの権限に依存。取得できなければ情報のみ表示する。
+ const r=await sb.rpc('get_assignment_questions',{p_assignment:id});
+ const qs=!r.error&&Array.isArray(r.data)?r.data:[];
+ manageShow(`<h3>${esc(a.title)}</h3><p>締切：${fmt(a.deadline)}</p>${r.error?'<p class="notice">問題の詳細は現在のデータベース権限では取得できません。</p>':qs.map((q,i)=>`<div class="question"><strong>問題 ${i+1}：${esc(q.prompt)}</strong>${Array.isArray(q.options)?`<p>${q.options.map((o,j)=>`${j+1}. ${esc(o)}`).join(' / ')}</p>`:''}${Number.isInteger(q.answer)?`<p>正解：${esc(q.options?.[q.answer]||'')}</p>`:''}<small>${esc(q.explanation||'')}</small></div>`).join('')}`);
+}
+async function manageEdit(type,id){
+ if(profile.role!=='teacher')return;
+ if(type==='written'){go('written');writtenEditPublished(id);return;}
+ const a=assignments.find(x=>x.id===id);if(!a)return;
+ const count=submissions.filter(x=>x.assignment_id===id).length;
+ const r=await sb.rpc('get_assignment_questions',{p_assignment:id});
+ if(r.error || !Array.isArray(r.data)){
+  manageShow(`<h3>${esc(a.title)}｜編集</h3><p class="notice">問題を取得できません。データベースの教師用閲覧権限を確認してください。</p><p>${esc(r.error?.message||'問題データがありません')}</p>`);return;
+ }
+ manageChoiceDraft={id,questions:JSON.parse(JSON.stringify(r.data)),original:JSON.parse(JSON.stringify(r.data)),locked:count>0};
+ manageDrawChoiceEditor();
+}
+let manageChoiceDraft=null;
+function manageDrawChoiceEditor(){
+ const d=manageChoiceDraft;if(!d)return;
+ const a=assignments.find(x=>x.id===d.id);if(!a)return;
+ const date=new Date(a.deadline);
+ const local=new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
+ manageShow(`<h3>${esc(a.title)}｜編集</h3><p class="notice">${d.locked?'提出済みの回答があるため、問題内容・正解は変更できません。名称と締切のみ変更できます。':'問題文、選択肢、正解、解説を編集できます。保存するまで学生には反映されません。'}</p>
+ <label>課題名</label><input id="manageTitle" value="${esc(a.title)}">
+ <label>締切</label><input type="datetime-local" id="manageDeadline" value="${local}">
+ <h3 style="margin-top:20px">問題内容（${d.questions.length}問）</h3>
+ ${d.questions.map((q,i)=>`<div class="q-edit"><h3>問題 ${i+1}</h3><label>問題文</label><textarea id="mcPrompt${i}" ${d.locked?'disabled':''}>${esc(q.prompt)}</textarea><label>選択肢（正解の丸を選択）</label>${(q.options||[]).map((o,j)=>`<div class="choice"><input type="radio" name="mcAnswer${i}" value="${j}" ${Number(q.answer)===j?'checked':''} ${d.locked?'disabled':''}><input type="text" id="mcOpt${i}_${j}" value="${esc(o)}" ${d.locked?'disabled':''}></div>`).join('')}<label>解説</label><textarea id="mcExplain${i}" ${d.locked?'disabled':''}>${esc(q.explanation||'')}</textarea></div>`).join('')}
+ <div class="stack"><button class="primary" onclick="manageSaveChoice('${d.id}')">変更を保存</button><button onclick="go('manage')">キャンセル</button></div>`);
+}
+async function manageSaveChoice(id){
+ const d=manageChoiceDraft;
+ if(!d||d.id!==id)return;
+ const title=$('manageTitle')?.value.trim(),raw=$('manageDeadline')?.value,date=new Date(raw);
+ if(!title||!raw||!Number.isFinite(date.getTime()))return alert('課題名と正しい締切を入力してください');
+ const changes=[];
+ if(!d.locked){
+  for(let i=0;i<d.questions.length;i++){
+   const q=d.questions[i],prompt=$('mcPrompt'+i).value.trim(),options=(q.options||[]).map((_,j)=>$('mcOpt'+i+'_'+j).value.trim());
+   const answer=Number(document.querySelector(`input[name="mcAnswer${i}"]:checked`)?.value);
+   const explanation=$('mcExplain'+i).value.trim();
+   if(!prompt||options.some(x=>!x)||!Number.isInteger(answer)||answer<0||answer>=options.length)return alert(`問題 ${i+1} の入力を確認してください`);
+   if(!q.id)return alert('問題IDが取得できません。保存できません。');
+   const updated={prompt,options,answer,explanation};
+   if(JSON.stringify(updated)!==JSON.stringify({prompt:q.prompt,options:q.options,answer:q.answer,explanation:q.explanation||''}))changes.push({id:q.id,...updated});
+  }
+ }
+ if(!confirm(`課題情報${changes.length?'と問題 '+changes.length+' 件':''}を更新しますか？`))return;
+ // 問題の更新は専用の教師用RPCを使用し、学生の採点権限とは分離する。
+ if(changes.length){
+  const r=await sb.rpc('teacher_update_assignment_questions',{p_assignment:id,p_questions:changes});
+  if(r.error)return alert('問題の更新に失敗しました。教師用SQLの設定を確認してください。\n'+r.error.message);
+ }
+ const r=await sb.from('assignments').update({title,deadline:date.toISOString()}).eq('id',id).select('id');
+ if(r.error)return warn(r.error);
+ if(!r.data?.length)return alert('課題名・締切を更新できません。Supabaseの権限を確認してください。');
+ manageChoiceDraft=null;await refresh();alert('変更を保存しました');
+}
+function manageSubmissions(type,id){
+ if(type==='written'){go('written');writtenResults(id);return;}
+ const a=assignments.find(x=>x.id===id);if(!a)return;
+ const enrolled=students.filter(st=>members.some(m=>m.student_id===st.id&&m.class_id===a.class_id));
+ manageShow(`<h3>${esc(a.title)}｜提出状況</h3>${enrolled.map(st=>{const r=submissions.find(x=>x.assignment_id===id&&x.student_id===st.id);return `<div class="row" style="padding:10px 0;border-bottom:1px solid #eee"><strong>${esc(st.full_name)}</strong><span>${r?`${esc(r.score)}点・提出済み`:'未提出'}</span></div>`}).join('')||'<p>対象学生はいません。</p>'}`);
+}
+async function manageDelete(type,id){
+ if(profile.role!=='teacher')return;
+ if(type==='written'){await writtenDeletePublished(id);return;}
+ const a=assignments.find(x=>x.id===id);if(!a)return;
+ const count=submissions.filter(x=>x.assignment_id===id).length;
+ if(count)return alert(`${count}件の提出があります。成績を保護するため削除できません。`);
+ if(!confirm(`「${a.title}」を削除しますか？この操作は取り消せません。`))return;
+ const r=await sb.from('assignments').delete().eq('id',id).select('id');
+ if(r.error)return warn(r.error);if(!r.data?.length)return alert('削除できません。既存の問題との参照関係またはSupabaseの権限を確認してください。');
  await refresh();alert('削除しました');
 }
 boot().catch(warn);

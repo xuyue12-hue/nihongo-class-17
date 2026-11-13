@@ -98,10 +98,41 @@ async function writtenPublish(){
  if(r.error)return warn(r.error);writtenDraft=[];localStorage.removeItem(writtenKey());await refresh();alert('配信しました')
 }
 function writtenStudent(){return `<h2>記述式テスト</h2>${writtenTests.map(t=>{let a=writtenAnswers.find(x=>x.test_id===t.id&&x.student_id===user.id);return `<div class="card"><div class="row"><strong>${esc(t.title)}</strong><span class="pill">${a?'提出済み':closed(t)?'締切終了':'未提出'}</span></div><p class="mutedtext">締切：${fmt(t.deadline)}</p>${a?(closed(t)?`<button onclick="writtenReview('${t.id}')">結果・解説を見る</button>`:'締切後に採点結果を公開します。'):!closed(t)?`<button class="primary" onclick="writtenOpen('${t.id}')">回答する</button>`:''}</div>`}).join('')||'<div class="card">現在、テストはありません。</div>'}<div id="wStudentForm"></div>`}
-function writtenOpen(id){let t=writtenTests.find(x=>x.id===id);if(!t||closed(t)||writtenAnswers.some(x=>x.test_id===id&&x.student_id===user.id))return;let saved=JSON.parse(localStorage.getItem('written_answers_'+user.id+'_'+id)||'{}');$('wStudentForm').innerHTML=`<div class="card"><h3>${esc(t.title)}</h3><p class="notice">入力内容はこの端末に一時保存されます。提出後は変更できません。</p>${t.questions.map((q,i)=>`<div class="written-item"><strong>問題 ${i+1}｜${q.kind==='vocab'?'読み方':'文法・作文'}</strong><p>${esc(q.prompt)}</p>${q.kind==='vocab'?`<input id="wa${i}" value="${esc(saved[i]||'')}" placeholder="ひらがなで入力" oninput="writtenSaveLocal('${id}')">`:`<textarea id="wa${i}" placeholder="文を作ってください" oninput="writtenSaveLocal('${id}')">${esc(saved[i]||'')}</textarea>`}</div>`).join('')}<button class="primary wide" onclick="writtenSubmit('${id}')">提出する</button></div>`;$('wStudentForm').scrollIntoView({behavior:'smooth'})}
+function writtenOpen(id){let t=writtenTests.find(x=>x.id===id);if(!t||closed(t)||writtenAnswers.some(x=>x.test_id===id&&x.student_id===user.id))return;let saved=JSON.parse(localStorage.getItem('written_answers_'+user.id+'_'+id)||'{}');$('wStudentForm').innerHTML=`<div class="card"><h3>${esc(t.title)}</h3><p class="notice">入力内容はこの端末に一時保存されます。提出後は変更できません。</p>${t.questions.map((q,i)=>`<div class="written-item"><strong>問題 ${i+1}｜${q.kind==='vocab'?'読み方':'文法・作文'}</strong><p>${esc(q.prompt)}</p>${q.kind==='vocab'?`<input id="wa${i}" value="${esc(saved[i]||'')}" placeholder="ひらがなで入力" oninput="writtenSaveLocal('${id}')">`:`<textarea id="wa${i}" placeholder="文を作ってください" oninput="writtenSaveLocal('${id}')">${esc(saved[i]||'')}</textarea>`}</div>`).join('')}<button class="primary wide" id="writtenSubmitBtn" onclick="writtenSubmit('${id}')">提出する</button></div>`;$('wStudentForm').scrollIntoView({behavior:'smooth'})}
 function writtenSaveLocal(id){let t=writtenTests.find(x=>x.id===id),answers={};t.questions.forEach((q,i)=>answers[i]=$('wa'+i)?.value||'');localStorage.setItem('written_answers_'+user.id+'_'+id,JSON.stringify(answers))}
 const normalizeKana=x=>String(x||'').normalize('NFKC').trim().replace(/\s/g,'').replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-96));
-async function writtenSubmit(id){let t=writtenTests.find(x=>x.id===id);if(!t||closed(t))return alert('締切終了');let answers=t.questions.map((q,i)=>$('wa'+i).value.trim());if(answers.some(x=>!x)&&!confirm('未回答があります。提出しますか？'))return;if(!confirm('提出後は変更できません。提出しますか？'))return;let grades=t.questions.map((q,i)=>q.kind==='vocab'?(q.expected.split('|').some(x=>normalizeKana(x)===normalizeKana(answers[i]))?1:0):null);let r=await sb.rpc('submit_written_test',{p_test_id:id,p_answers:answers});if(r.error)return warn(r.error);localStorage.removeItem('written_answers_'+user.id+'_'+id);await refresh();alert('提出しました')}
+let writtenSubmitting=false;
+async function writtenSubmit(id){
+ if(writtenSubmitting)return;
+ const t=writtenTests.find(x=>x.id===id);
+ if(!t)return alert('テストが見つかりません。画面を更新してください。');
+ if(closed(t))return alert('締切終了');
+ const answers=t.questions.map((q,i)=>document.getElementById('wa'+i)?.value.trim()??'');
+ writtenSaveLocal(id);
+ if(answers.some(x=>!x)&&!confirm('未回答があります。提出しますか？'))return;
+ if(!confirm('提出後は変更できません。提出しますか？'))return;
+ const btn=document.getElementById('writtenSubmitBtn');
+ writtenSubmitting=true;
+ if(btn){btn.disabled=true;btn.textContent='提出中...';}
+ try{
+  const r=await sb.rpc('submit_written_test',{p_test_id:id,p_answers:answers});
+  if(r.error)throw r.error;
+  // 提出の確定をサーバーから再取得して確認する。
+  const check=await sb.from('written_answers').select('id').eq('test_id',id).eq('student_id',user.id).limit(1);
+  if(check.error)console.warn('提出確認の読み取りに失敗',check.error);
+  else if(!check.data?.length)throw new Error('提出の確認ができませんでした。教師に提出状況を確認してもらってください。');
+  localStorage.removeItem('written_answers_'+user.id+'_'+id);
+  await refresh();
+  alert('提出しました！');
+ }catch(e){
+  console.error('記述式提出エラー',e);
+  const message=e?.message||String(e);
+  alert('提出できませんでした。入力内容はこの端末に保存されています。\n\nエラー：'+message+'\n\nこの画面を撮影して先生に送ってください。');
+ }finally{
+  writtenSubmitting=false;
+  if(btn?.isConnected){btn.disabled=false;btn.textContent='提出する';}
+ }
+}
 function writtenReview(id){let t=writtenTests.find(x=>x.id===id),a=writtenAnswers.find(x=>x.test_id===id&&x.student_id===user.id);if(!t||!a||!closed(t))return;let total=a.grades.reduce((s,g)=>s+(g||0),0),max=t.questions.reduce((s,q)=>s+(q.kind==='vocab'?1:2),0);$('wStudentForm').innerHTML=`<div class="card"><h3>${esc(t.title)}｜${a.grades.includes(null)?'採点中':total+' / '+max+' 点'}</h3>${t.questions.map((q,i)=>`<div class="written-item"><strong>${i+1}. ${esc(q.prompt)}</strong><p>回答：${esc(a.answers[i]||'（未回答）')}</p><p>得点：${a.grades[i]===null?'教師確認待ち':a.grades[i]+' / '+(q.kind==='vocab'?1:2)}</p><small>参考：${esc(q.kind==='vocab'?q.expected:q.explanation||'解説なし')}</small></div>`).join('')}</div>`;$('wStudentForm').scrollIntoView({behavior:'smooth'})}
 async function writtenResults(id){let t=writtenTests.find(x=>x.id===id);if(!t)return;let list=writtenAnswers.filter(a=>a.test_id===id);$('wResults').innerHTML=`<div class="card"><div class="row"><h3>${esc(t.title)}｜提出状況</h3><button onclick="$('wResults').innerHTML=''">閉じる</button></div>${students.filter(st=>members.some(m=>m.student_id===st.id&&m.class_id===t.class_id)).map(st=>{let a=list.find(x=>x.student_id===st.id);return `<div class="written-item"><div class="row"><strong>${esc(st.full_name)}</strong>${a?`<button onclick="writtenGrade('${id}','${st.id}')">回答・採点</button>`:'未提出'}</div>${a?`<small>${a.grades.includes(null)?'採点待ち':'採点済み'}｜${a.grades.reduce((s,g)=>s+(g||0),0)}点</small>`:''}</div>`}).join('')}</div>`;$('wResults').scrollIntoView({behavior:'smooth'})}
 function writtenGrade(id,studentId){let t=writtenTests.find(x=>x.id===id),a=writtenAnswers.find(x=>x.test_id===id&&x.student_id===studentId),st=students.find(x=>x.id===studentId);if(!t||!a)return;$('wResults').innerHTML=`<div class="card"><div class="row"><h3>${esc(st?.full_name||'学生')}｜${esc(t.title)}</h3><button onclick="writtenResults('${id}')">一覧に戻る</button></div>${t.questions.map((q,i)=>`<div class="written-item"><strong>問題 ${i+1}｜${q.kind==='vocab'?'語彙':'作文'}</strong><p>${esc(q.prompt)}</p><p>学生の回答：<strong>${esc(a.answers[i]||'（未回答）')}</strong></p>${q.kind==='vocab'?`<small>正解：${esc(q.expected)} / ${a.grades[i]}点</small>`:`<p class="mutedtext">模範文・解説：${esc(q.explanation||'なし')}</p><label>教師採点（0～2点）</label><select id="wg${i}"><option value="" ${a.grades[i]===null?'selected':''}>未採点</option>${[0,1,2].map(n=>`<option value="${n}" ${a.grades[i]===n?'selected':''}>${n}点</option>`).join('')}</select>`}</div>`).join('')}<button class="primary wide" onclick="writtenSaveGrades('${id}','${studentId}')">採点を保存</button></div>`;$('wResults').scrollIntoView({behavior:'smooth'})}

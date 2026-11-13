@@ -4,12 +4,15 @@
 .editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.editor-grid label{margin:0}.editor-grid input{margin-top:5px}.editor-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.q-edit{background:#f7f9ff;border:1px solid #dce5fa;border-radius:13px;padding:15px;margin:12px 0}.q-edit .choice{display:flex;align-items:center;gap:7px;margin:7px 0}.q-edit .choice input[type=radio]{width:19px;flex:none}.q-edit .choice input[type=text]{flex:1;min-width:0}.q-list{display:flex;flex-direction:column;gap:9px}.q-list .question{margin:0}.q-list .question p{margin:6px 0}.compact{font-size:12px;padding:7px 10px}.sticky-publish{position:sticky;bottom:10px;background:white;padding:12px;border:1px solid #dce5fa;border-radius:12px;box-shadow:0 3px 14px #26334715;z-index:2}.batch-help{font-size:13px;color:#64748b;white-space:pre-line}@media(max-width:600px){.editor-grid{grid-template-columns:1fr}}
 
 .study-tools{display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:14px}.study-tools input{margin:0}.study-details summary{cursor:pointer;font-weight:650}.study-details[open] summary{margin-bottom:12px}@media(max-width:600px){.study-tools{grid-template-columns:1fr}} .written-item{padding:14px;border:1px solid #dfe6f1;border-radius:12px;margin:12px 0}.written-item textarea{min-height:65px}.written-tag{font-size:12px;background:#eef2ff;border-radius:8px;padding:4px 8px}.written-item input[type=number]{max-width:90px}.written-item .row{margin-top:9px} 
-</style></head><body><div id="app"><div class="auth card">読み込み中...</div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script>
+
+.reading-card{max-width:650px;margin:18px auto;padding:24px;border-radius:24px;background:#fff;border:1px solid #e1e7f1;box-shadow:0 8px 28px #23365b0b}.reading-word{text-align:center;font-size:clamp(34px,8vw,56px);font-weight:750;padding:52px 10px 42px;overflow-wrap:anywhere}.reading-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.reading-option{min-height:90px;border:2px solid #e0e7f3;background:#fff;border-radius:17px;font-size:clamp(16px,4vw,21px);padding:14px 6px}.reading-option.selected{border-color:#496fe0;background:#edf2ff;color:#244ebd}.reading-progress{text-align:center;color:#64748b;font-size:14px}.reading-navigation{max-width:650px;margin:14px auto;display:flex;justify-content:space-between;gap:12px}.reading-navigation button{min-width:100px}.reading-review{font-size:14px;color:#53657e;text-align:center;margin-top:14px}@media(max-width:370px){.reading-card{padding:13px}.reading-options{gap:8px}.reading-option{min-height:76px}}
+.mode-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin-top:20px}.mode-tile{display:flex;flex-direction:column;align-items:flex-start;gap:12px;text-align:left;background:white;border:1px solid #dfe6f1;padding:28px;border-radius:19px;min-height:135px}.mode-tile strong{font-size:21px}.mode-tile small{font-size:13px;line-height:1.6}@media(max-width:600px){.mode-grid{grid-template-columns:1fr}.mode-tile{min-height:105px;padding:20px}}.learned-flashcard{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;width:100%;min-height:310px;margin:18px 0;border:1px solid #dce5fa;background:linear-gradient(145deg,#fff,#f1f5ff);border-radius:22px;box-shadow:0 5px 18px #253f7312;color:#263347}.learned-flashcard span{font-size:clamp(30px,8vw,55px);font-weight:750;overflow-wrap:anywhere}.learned-flashcard small{font-size:13px;color:#72819b}.reading-navigation{display:flex;justify-content:space-between;gap:12px}.reading-navigation button{flex:1}</style></head><body><div id="app"><div class="auth card">読み込み中...</div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=s=>new Date(s).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',dateStyle:'medium',timeStyle:'short'});
 const closed=a=>Date.now()>new Date(a.deadline).getTime();
 const cfgKey='nihongo_supabase_public_config';
+let teacherMode='choice', writtenMode='vocab';
 let cfg={url:'https://irnhlggwhwjitfohkxxi.supabase.co',key:'sb_publishable_JUtrHWkmTGrXre3HbVUVzA_D9DvEdAh'}, sb=null, user=null, profile=null,tab='home',materials=[],assignments=[],students=[],classes=[],members=[],submissions=[],writtenTests=[],writtenAnswers=[],questionsDraft=[],answerDraft={},opened=null,showAnswer=false,editingQuestion=-1;
 const warn=e=>{console.error(e);alert(e?.message||String(e))};
 function initClient(){if(!cfg?.url||!cfg?.key)return false;try{sb=window.supabase.createClient(cfg.url,cfg.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return true}catch(e){warn(e);return false}}
@@ -18,18 +21,21 @@ function showLogin(msg=''){$('app').innerHTML=`<div class="auth card"><h2>🌸 �
 async function loadUser(){let {data:{user:u},error}=await sb.auth.getUser();if(error||!u){showLogin();return}user=u;let r=await sb.from('profiles').select('id,full_name,role').eq('id',u.id).single();if(r.error||!r.data){$('app').innerHTML='<div class="auth card"><h2>プロフィール未登録</h2><p>教師にアカウント登録を依頼してください。</p><button onclick="logout()">ログアウト</button></div>';return}profile=r.data;await refresh()}
 async function logout(){await sb.auth.signOut();showLogin()}
 async function refresh(){let rs=await Promise.all([sb.from('materials').select('*').order('created_at',{ascending:false}),sb.from('assignments').select('*').order('created_at',{ascending:false}),sb.from('classes').select('*'),sb.from('submissions').select('*')]);for(let r of rs)if(r.error){warn(r.error);return} [materials,assignments,classes,submissions]=rs.map(r=>r.data);if(profile.role==='teacher'){let [p,m]=await Promise.all([sb.from('profiles').select('id,full_name,role').order('full_name'),sb.from('class_members').select('*')]);if(p.error||m.error)return warn(p.error||m.error);students=p.data.filter(x=>x.role==='student');members=m.data}else{let m=await sb.from('class_members').select('class_id').eq('student_id',user.id);members=m.data||[];assignments=assignments.filter(a=>members.some(x=>x.class_id===a.class_id));let results=await sb.rpc('get_my_results');if(!results.error)submissions=results.data.map(x=>({...x,student_id:user.id,score:x.score,answers:x.answers}))}await loadWritten();render()}
-const navs=()=>profile.role==='teacher'?[['home','ホーム'],['students','学生管理'],['materials','教材・問題'],['assignments','課題配信'],['written','記述式テスト'],['manage','課題管理'],['grades','成績管理']]:[['home','ホーム'],['study','言葉・文法'],['assignments','私の課題'],['written','記述式テスト'],['grades','成績']];
-function render(){let ns=navs();if(!ns.some(x=>x[0]===tab))tab='home';$('app').innerHTML=`<header><div><h1>🌸 日本語学習システム</h1><small>${esc(profile.full_name)} · ${profile.role==='teacher'?'教師':'学生'}</small></div><button class="logout" onclick="logout()">ログアウト</button></header><main class="wrap"><nav class="tabs" id="nav">${ns.map(([k,t])=>`<button class="${tab===k?'active':''}" onclick="go('${k}')">${t}</button>`).join('')}</nav><section id="screen"></section></main><div class="bottom" id="bottom">${ns.slice(0,4).map(([k,t])=>`<button class="${tab===k?'active':''}" onclick="go('${k}')">${t}</button>`).join('')}</div>`;$('screen').innerHTML=profile.role==='teacher'?teacher():student();restoreTeacherDraft()}
+const navs=()=>profile.role==='teacher'?[['home','ホーム'],['students','学生管理'],['materials','教材・問題'],['create','課題を作成'],['manage','課題管理'],['grades','成績管理']]:[['home','ホーム'],['study','言葉・文法'],['assignments','私の課題'],['learned','学んだ単語'],['grades','成績']];
+function render(){let ns=navs();if(!ns.some(x=>x[0]===tab)&&!(profile.role==='teacher'&&['assignments','written'].includes(tab)))tab='home';$('app').innerHTML=`<header><div><h1>🌸 日本語学習システム</h1><small>${esc(profile.full_name)} · ${profile.role==='teacher'?'教師':'学生'}</small></div><button class="logout" onclick="logout()">ログアウト</button></header><main class="wrap"><nav class="tabs" id="nav">${ns.map(([k,t])=>`<button class="${tab===k?'active':''}" onclick="go('${k}')">${t}</button>`).join('')}</nav><section id="screen"></section></main><div class="bottom" id="bottom">${ns.slice(0,4).map(([k,t])=>`<button class="${tab===k?'active':''}" onclick="go('${k}')">${t}</button>`).join('')}</div>`;$('screen').innerHTML=profile.role==='teacher'?teacher():student();restoreTeacherDraft();configureTeacherMode()}
 function go(k){tab=k;opened=null;render()}
-function teacher(){if(tab==='manage')return manageTeacher();if(tab==='written')return writtenTeacher();if(tab==='home')return `<h2>教師ダッシュボード</h2><div class="grid"><div class="metric"><strong>${students.length}</strong>登録学生</div><div class="metric"><strong>${assignments.length}</strong>配信課題</div><div class="metric"><strong>${submissions.length}</strong>提出件数</div></div><div class="card"><h3>クラス管理</h3><p>学生名の変更、教材登録、課題の配信、提出状況の確認ができます。</p><button class="primary" onclick="go('assignments')">課題を作成</button></div>`;
+function chooseTeacherMode(mode){questionsDraft=[];writtenDraft=[];teacherMode=mode;writtenMode=mode==='sentence'?'grammar':'vocab';tab=(mode==='written'||mode==='sentence')?'written':'assignments';render()}
+function createTeacherHome(){return `<h2>課題を作成</h2><p class="mutedtext">問題の種類を選んでください。種類ごとに入力画面が分かれています。</p><div class="mode-grid">${[['written','記述問題','短い答えを入力する問題'],['choice','選択問題','4つの選択肢から答える問題・漢字の読み方'],['sentence','造文問題','文法を使って文を作る問題'],['meaning','意味を選ぶ問題','単語に合う意味を選ぶ問題']].map(([k,n,d])=>`<button class="mode-tile" onclick="chooseTeacherMode('${k}')"><strong>${n}</strong><small>${d}</small></button>`).join('')}</div>`}
+function configureTeacherMode(){if(profile?.role!=='teacher')return;if(tab==='written'){let grammar=writtenMode==='grammar';let t=$('wType');if(t){t.value=grammar?'grammar':'vocab';t.disabled=true;writtenTypeChange()}let h=document.querySelector('#screen h2');if(h)h.textContent=grammar?'造文問題':'記述問題';let note=document.querySelector('#screen .notice');if(note)note.textContent=grammar?'学生が文法を使って造文します。教師が0～2点で採点します。':'学生が答えをひらがなで入力します。正解と照合して自動採点します。';let typeLabel=t?.previousElementSibling;if(typeLabel)typeLabel.classList.add('hidden');let back=document.createElement('button');back.textContent='← 出題メニュー';back.onclick=()=>go('create');document.querySelector('#screen h2')?.after(back)}if(tab==='assignments'){let h=document.querySelector('#screen h2');if(h)h.textContent=teacherMode==='meaning'?'意味を選ぶ問題':'選択問題';let back=document.createElement('button');back.textContent='← 出題メニュー';back.onclick=()=>go('create');h?.after(back);let reading=$('readingPanel'),batch=$('batchPanel');if(teacherMode==='meaning'){document.querySelector('[onclick="toggleReadingPanel()"]')?.classList.add('hidden');document.querySelector('[onclick="toggleBatch()"]')?.classList.add('hidden');reading?.classList.add('hidden');batch?.classList.add('hidden');let a=document.querySelector('[onclick="autoQuestions()"]');if(a)a.textContent='教材から意味問題を作成';let qp=$('qp');if(qp)qp.placeholder='例：改善';let label=qp?.previousElementSibling;if(label)label.textContent='単語・問題文';}else{let a=document.querySelector('[onclick="autoQuestions()"]');if(a)a.classList.add('hidden');}}}
+function teacher(){if(tab==='create')return createTeacherHome();if(tab==='manage')return manageTeacher();if(tab==='written')return writtenTeacher();if(tab==='home')return `<h2>教師ダッシュボード</h2><div class="grid"><div class="metric"><strong>${students.length}</strong>登録学生</div><div class="metric"><strong>${assignments.length}</strong>配信課題</div><div class="metric"><strong>${submissions.length}</strong>提出件数</div></div><div class="card"><h3>クラス管理</h3><p>学生名の変更、教材登録、課題の配信、提出状況の確認ができます。</p><button class="primary" onclick="go('create')">課題を作成</button></div>`;
 if(tab==='students')return `<h2>学生管理</h2><div class="card"><p class="notice">ログインアカウントの新規作成は Supabase Authentication で行い、profiles と class_members に登録してください。氏名の編集はここからできます。</p>${students.map(s=>`<div class="row" style="padding:12px 0;border-top:1px solid #eee"><strong>${esc(s.full_name)}</strong><button onclick="rename('${s.id}')">氏名編集</button></div>`).join('')||'学生が登録されていません。'}</div>`;
 if(tab==='materials')return `<h2>教材・問題</h2><div class="card"><h3>教材を追加</h3><label>種類</label><select id="mk"><option value="vocab">言葉</option><option value="grammar">文法</option></select><label>項目</label><input id="mt"><label>読み方・接続</label><input id="mr"><label>意味・説明</label><textarea id="mm"></textarea><label>例文</label><textarea id="me"></textarea><button class="primary" onclick="addMaterial()">保存</button></div>${materials.map(m=>`<div class="card"><span class="pill">${m.kind==='vocab'?'言葉':'文法'}</span><h3>${esc(m.term)}</h3><small>${esc(m.reading)}</small><p>${esc(m.meaning)}</p><p>${esc(m.example)}</p><button class="danger" onclick="delMaterial('${m.id}')">削除</button></div>`).join('')}`;
-if(tab==='assignments')return `<h2>課題配信</h2><div class="card"><h3>新しい課題</h3><div class="editor-grid"><div><label>配信クラス</label><select id="ac" onchange="saveTeacherDraft()">${classes.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div><div><label>課題名</label><input id="an" placeholder="例：N2 第1回" oninput="saveTeacherDraft()"></div></div><label>締切（日本時間）</label><input type="datetime-local" id="ad" onchange="saveTeacherDraft()"><div class="notice">提出は1回。正解と点数は締切後に公開されます。</div><div class="editor-actions"><button onclick="autoQuestions()">教材から問題を作成</button><button onclick="toggleBatch()">まとめて貼り付け</button><button class="danger" onclick="clearTeacherDraft()">草稿をクリア</button></div><div id="batchPanel" class="q-edit hidden"><h3>問題を一括追加</h3><p class="batch-help">1問につき6行（問題文、選択肢4行、正解番号）。問題同士は空行で区切ってください。</p><textarea id="batchText" style="min-height:180px" placeholder="「勉強」の意味は？&#10;学ぶこと&#10;寝ること&#10;遊ぶこと&#10;走ること&#10;1&#10;&#10;「早い」の反対は？&#10;遅い&#10;広い&#10;高い&#10;長い&#10;1"></textarea><button class="primary" onclick="importBatch()">一括追加</button></div><div class="q-edit"><h3 id="editorTitle">＋ 問題を追加</h3><label>問題文</label><textarea id="qp" placeholder="問題を入力してください" style="min-height:64px"></textarea><label>選択肢（左の丸を押して正解を指定）</label>${[0,1,2,3].map(i=>`<div class="choice"><input type="radio" name="correct" value="${i}" ${i===0?'checked':''} aria-label="選択肢${i+1}が正解"><input type="text" id="o${i}" placeholder="選択肢 ${i+1}"></div>`).join('')}<details><summary>解説を追加（任意）</summary><textarea id="qe" placeholder="解説"></textarea></details><div class="editor-actions"><button class="primary" onclick="addQuestion()" id="addQBtn">＋ 追加して次の問題へ</button><button onclick="resetQuestionEditor()">入力をクリア</button></div></div><div class="row"><h3>作成中：<span id="qCount">${questionsDraft.length}</span>問</h3><small>編集・複製・削除できます</small></div><div class="q-list" id="draftList">${draftQuestionList()}</div><div class="sticky-publish"><button class="primary wide" onclick="publish()">${questionsDraft.length}問を課題として配信</button></div></div><h3>配信済み</h3>${assignments.map(a=>`<div class="card"><strong>${esc(a.title)}</strong><p>締切：${fmt(a.deadline)} · ${closed(a)?'締切終了':'受付中'}</p></div>`).join('')}`;
+if(tab==='assignments')return `<h2>課題配信</h2><div class="card"><h3>新しい課題</h3><div class="editor-grid"><div><label>配信クラス</label><select id="ac" onchange="saveTeacherDraft()">${classes.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div><div><label>課題名</label><input id="an" placeholder="例：N2 第1回" oninput="saveTeacherDraft()"></div></div><label>締切（日本時間）</label><input type="datetime-local" id="ad" onchange="saveTeacherDraft()"><div class="notice">提出は1回。正解と点数は締切後に公開されます。</div><div class="editor-actions"><button onclick="autoQuestions()">教材から問題を作成</button><button onclick="toggleBatch()">まとめて貼り付け</button><button class="primary" onclick="toggleReadingPanel()">漢字の読み方・一括出題</button><button class="danger" onclick="clearTeacherDraft()">草稿をクリア</button></div><div id="batchPanel" class="q-edit hidden"><h3>問題を一括追加</h3><p class="batch-help">1問につき6行（問題文、選択肢4行、正解番号）。問題同士は空行で区切ってください。</p><textarea id="batchText" style="min-height:180px" placeholder="「勉強」の意味は？&#10;学ぶこと&#10;寝ること&#10;遊ぶこと&#10;走ること&#10;1&#10;&#10;「早い」の反対は？&#10;遅い&#10;広い&#10;高い&#10;長い&#10;1"></textarea><button class="primary" onclick="importBatch()">一括追加</button></div><div id="readingPanel" class="q-edit hidden"><h3>漢字の読み方・一括出題</h3><p class="batch-help">漢字を1行に1語ずつ貼り付けてください。公開辞書を検索し、候補の読み方を取得します。検索できない語や複数の読みがある語は必ず確認してください。辞書サービスの接続状況により利用できない場合があります。</p><label>教材</label><select id="readingBook"><option>新完全マスター</option><option>日本語総まとめ</option><option>その他</option></select><label>課・範囲（任意）</label><input id="readingLesson" placeholder="例：N2 第3課"><label>単語一覧</label><textarea id="readingWords" style="min-height:145px" placeholder="改善&#10;承諾&#10;促進&#10;著しい&#10;適切"></textarea><div class="editor-actions"><button class="primary" id="readingLookupBtn" onclick="lookupReadings()">読み方を自動検索</button><button onclick="clearReadingPreview()">候補をクリア</button></div><p id="readingStatus" class="mutedtext"></p><div id="readingPreview"></div><button class="primary wide hidden" id="readingAddBtn" onclick="addReadingQuestions()">確認した問題を課題に追加</button></div><div class="q-edit"><h3 id="editorTitle">＋ 問題を追加</h3><label>問題文</label><textarea id="qp" placeholder="問題を入力してください" style="min-height:64px"></textarea><label>選択肢（左の丸を押して正解を指定）</label>${[0,1,2,3].map(i=>`<div class="choice"><input type="radio" name="correct" value="${i}" ${i===0?'checked':''} aria-label="選択肢${i+1}が正解"><input type="text" id="o${i}" placeholder="選択肢 ${i+1}"></div>`).join('')}<details><summary>解説を追加（任意）</summary><textarea id="qe" placeholder="解説"></textarea></details><div class="editor-actions"><button class="primary" onclick="addQuestion()" id="addQBtn">＋ 追加して次の問題へ</button><button onclick="resetQuestionEditor()">入力をクリア</button></div></div><div class="row"><h3>作成中：<span id="qCount">${questionsDraft.length}</span>問</h3><small>編集・複製・削除できます</small></div><div class="q-list" id="draftList">${draftQuestionList()}</div><div class="sticky-publish"><button class="primary wide" onclick="publish()">${questionsDraft.length}問を課題として配信</button></div></div><h3>配信済み</h3>${assignments.map(a=>`<div class="card"><strong>${esc(a.title)}</strong><p>締切：${fmt(a.deadline)} · ${closed(a)?'締切終了':'受付中'}</p></div>`).join('')}`;
 if(tab==='grades')return `<h2>成績管理</h2>${assignments.map(a=>`<div class="card"><h3>${esc(a.title)}</h3><small>締切：${fmt(a.deadline)}</small>${students.filter(s=>members.some(m=>m.student_id===s.id&&m.class_id===a.class_id)).map(s=>{let r=submissions.find(x=>x.student_id===s.id&&x.assignment_id===a.id);return `<div class="row" style="border-top:1px solid #eee;padding:10px 0"><strong>${esc(s.full_name)}</strong><span>${r?`${r.score}点 · 提出済み`:'未提出'}</span></div>`}).join('')}</div>`).join('')||'<div class="card">課題がありません。</div>'}`}
 async function rename(id){let s=students.find(x=>x.id===id),name=prompt('新しい氏名',s.full_name);if(!name?.trim())return;let r=await sb.rpc('update_student_name',{p_student_id:id,p_new_name:name.trim()});if(r.error)return warn(r.error);await refresh()}
 async function addMaterial(){let term=$('mt').value.trim(),meaning=$('mm').value.trim();if(!term||!meaning)return alert('項目と意味は必須です');let r=await sb.from('materials').insert({kind:$('mk').value,term,reading:$('mr').value.trim(),meaning,example:$('me').value.trim()});if(r.error)return warn(r.error);await refresh()}
 async function delMaterial(id){if(!confirm('削除しますか？'))return;let r=await sb.from('materials').delete().eq('id',id);if(r.error)return warn(r.error);await refresh()}
-const teacherDraftKey=()=>`nihongo_teacher_draft_${user?.id||'unknown'}`;
+const teacherDraftKey=()=>`nihongo_teacher_draft_${teacherMode}_${user?.id||'unknown'}`;
 function saveTeacherDraft(){if(profile?.role!=='teacher')return;const previous=JSON.parse(localStorage.getItem(teacherDraftKey())||'{}');localStorage.setItem(teacherDraftKey(),JSON.stringify({title:$('an')?.value??previous.title??'',deadline:$('ad')?.value??previous.deadline??'',classId:$('ac')?.value??previous.classId??'',questions:questionsDraft}))}
 function restoreTeacherDraft(){if(profile?.role!=='teacher'||tab!=='assignments')return;try{let d=JSON.parse(localStorage.getItem(teacherDraftKey())||'{}');if(d.title&&$('an'))$('an').value=d.title;if(d.deadline&&$('ad'))$('ad').value=d.deadline;if(d.classId&&$('ac')&&[...$('ac').options].some(o=>o.value===String(d.classId)))$('ac').value=d.classId;if(!questionsDraft.length&&Array.isArray(d.questions))questionsDraft=d.questions;updateQuestionList()}catch(e){console.warn('草稿復元失敗',e)}}
 function draftQuestionList(){return questionsDraft.map((q,i)=>`<div class="question"><div class="row"><strong>${i+1}. ${esc(q.prompt)}</strong><div class="stack"><button class="compact" onclick="editQuestion(${i})">編集</button><button class="compact" onclick="duplicateQuestion(${i})">複製</button><button class="compact danger" onclick="removeQuestion(${i})">削除</button></div></div><p class="mutedtext">正解：${esc(q.options[q.answer])}</p></div>`).join('')||'<p class="mutedtext">まだ問題がありません。</p>'}
@@ -44,33 +50,178 @@ function importBatch(){let raw=$('batchText').value.trim();if(!raw)return;let bl
 function autoQuestions(){if(materials.length<4)return alert('教材を4件以上登録してください');questionsDraft.push(...materials.map(m=>{let opts=[m.meaning,...materials.filter(x=>x.id!==m.id).map(x=>x.meaning).sort(()=>Math.random()-.5).slice(0,3)].sort(()=>Math.random()-.5);return {prompt:`「${m.term}」の意味として正しいものを選んでください。`,options:opts,answer:opts.indexOf(m.meaning),explanation:m.example}}));saveTeacherDraft();updateQuestionList()}
 function addQuestion(){let prompt=$('qp').value.trim(),options=[0,1,2,3].map(i=>$('o'+i).value.trim());if(!prompt||options.some(x=>!x))return alert('問題文と4つの選択肢を入力してください');let q={prompt,options,answer:Number(document.querySelector('input[name="correct"]:checked').value),explanation:$('qe').value.trim()};if(editingQuestion>=0)questionsDraft[editingQuestion]=q;else questionsDraft.push(q);resetQuestionEditor();saveTeacherDraft();updateQuestionList();$('qp').focus()}
 async function publish(){let title=$('an').value.trim(),raw=$('ad').value,cid=Number($('ac').value);if(!title||!raw||!questionsDraft.length)return alert('課題名、締切、問題を入力してください');let deadline=new Date(raw);if(deadline<=new Date())return alert('未来の締切を指定してください');if(!confirm(`${questionsDraft.length}問を配信しますか？`))return;let r=await sb.rpc('publish_assignment',{p_class_id:cid,p_title:title,p_deadline:deadline.toISOString(),p_questions:questionsDraft});if(r.error)return warn(r.error);questionsDraft=[];localStorage.removeItem(teacherDraftKey());editingQuestion=-1;await refresh()}
+
+// 読み方一括出題: 辞書候補は教師が確認してから既存の選択式課題へ追加する。
+let readingCandidates=[];
+function toggleReadingPanel(){const p=$('readingPanel');p.classList.toggle('hidden');if(!p.classList.contains('hidden'))p.scrollIntoView({behavior:'smooth',block:'start'});}
+function clearReadingPreview(){readingCandidates=[];if($('readingPreview'))$('readingPreview').innerHTML='';if($('readingAddBtn'))$('readingAddBtn').classList.add('hidden');if($('readingStatus'))$('readingStatus').textContent='';}
+const kanaOnly=s=>/^[ぁ-ゖー・\s]+$/.test(s);
+function readingOptions(reading,pool){let options=[reading];for(const r of pool){if(r&&r!==reading&&!options.includes(r))options.push(r);if(options.length===4)break;}return options;}
+// ブラウザ内形態素解析：外部の辞書APIを直接呼ばない方式。
+let readingTokenizerPromise=null;
+function katakanaToHiragana(s){return String(s||'').replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-96));}
+function loadReadingTokenizer(){
+ if(readingTokenizerPromise)return readingTokenizerPromise;
+ readingTokenizerPromise=new Promise((resolve,reject)=>{
+  const start=()=>{
+   try{window.kuromoji.builder({dicPath:'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/'}).build((err,tokenizer)=>err?reject(err):resolve(tokenizer));}
+   catch(e){reject(e)}
+  };
+  if(window.kuromoji)return start();
+  const script=document.createElement('script');
+  script.src='https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js';
+  script.onload=start;script.onerror=()=>reject(new Error('日本語辞書のプログラムを読み込めませんでした'));
+  document.head.appendChild(script);
+ }).catch(e=>{readingTokenizerPromise=null;throw e});
+ return readingTokenizerPromise;
+}
+function tokenizerReading(tokenizer,word){
+ const tokens=tokenizer.tokenize(word);
+ if(!tokens.length)return '';
+ let result='';
+ for(const token of tokens){
+  if(token.reading&&token.reading!=='*')result+=katakanaToHiragana(token.reading);
+  else if(/^[ぁ-ゖァ-ヶー]+$/.test(token.surface_form))result+=katakanaToHiragana(token.surface_form);
+  else return '';
+ }
+ return kanaOnly(result)?result:'';
+}
+async function lookupReadings(){
+ const words=[...new Set(($('readingWords')?.value||'').split(/[\n、,，]+/).map(x=>x.trim()).filter(Boolean))];
+ if(!words.length)return alert('単語を入力してください');
+ if(words.length>100)return alert('一度に100語まで入力してください');
+ const btn=$('readingLookupBtn');btn.disabled=true;readingCandidates=[];
+ let tokenizer=null,error=null;
+ try{
+  $('readingStatus').textContent='日本語辞書を読み込んでいます。初回は少し時間がかかります…';
+  try{tokenizer=await loadReadingTokenizer()}catch(e){error=e;console.warn('辞書読み込み失敗',e)}
+  for(let i=0;i<words.length;i++){
+   const word=words[i],reading=tokenizer?tokenizerReading(tokenizer,word):'';
+   readingCandidates.push({word,reading,alternatives:reading?[reading]:[],checked:false});
+  }
+  drawReadingPreview();
+  const filled=readingCandidates.filter(q=>q.reading).length;
+  $('readingStatus').textContent=error
+   ?'辞書を読み込めませんでした。GitHub Pages（https://）で開いて再試行してください。詳細：'+(error.message||error)
+   :`${words.length}語中${filled}語の読み方を自動入力しました。候補は必ず確認してください。`;
+ }finally{btn.disabled=false}
+}
+function drawReadingPreview(){
+ const el=$('readingPreview');if(!el)return;
+ el.innerHTML=readingCandidates.map((q,i)=>`<div class="written-item"><div class="row"><strong>${i+1}. ${esc(q.word)}</strong><span class="pill ${q.reading&&q.alternatives.length===1?'ok':'warn'}">${q.reading&&q.alternatives.length===1?'候補あり':'要確認'}</span></div>${q.alternatives.length>1?`<small>辞書候補：${q.alternatives.map(esc).join(' / ')}</small>`:''}<label>正しい読み方（ひらがな）</label><input id="readingValue${i}" value="${esc(q.reading)}" placeholder="読み方を入力・修正" oninput="readingCandidates[${i}].checked=false;document.getElementById('readingCheck${i}').checked=false"><label class="option"><input type="checkbox" id="readingCheck${i}" ${q.checked?'checked':''} onchange="readingCandidates[${i}].checked=this.checked">読み方を確認しました</label></div>`).join('');
+ $('readingAddBtn').classList.toggle('hidden',!readingCandidates.length);
+}
+function makeDistractors(reading,allReadings){
+ const out=[];const add=v=>{if(v&&v!==reading&&kanaOnly(v)&&!out.includes(v))out.push(v)};
+ // 他の単語の読みを先に使い、足りない場合は音の近い候補を生成する。
+ // 他の問題の正解をそのまま流用しない（無関係な選択肢を防ぐ）。
+ const chars=[...reading];
+ const replacements=[['か','が'],['が','か'],['し','じ'],['じ','し'],['た','だ'],['だ','た'],['き','ぎ'],['ぎ','き'],['せ','ぜ'],['ぜ','せ'],['つ','っ'],['っ','つ'],['ん','う'],['う','ん'],['く','ぐ'],['ぐ','く'],['は','ば'],['ば','は']];
+ for(let i=0;i<chars.length;i++)for(const [a,b] of replacements)if(chars[i]===a){let c=chars.slice();c[i]=b;add(c.join(''));}
+ for(let i=0;i<chars.length&&out.length<3;i++)for(const c of ['か','し','つ','ん','う','く','き','せ','た']){let x=chars.slice();x[i]=c;add(x.join(''));if(out.length>=3)break;}
+ return out.slice(0,3);
+}
+function addReadingQuestions(){
+ if(!readingCandidates.length)return;
+ const values=readingCandidates.map((q,i)=>({word:q.word,reading:($('readingValue'+i)?.value||'').trim().normalize('NFKC'),checked:$('readingCheck'+i)?.checked}));
+ const bad=values.findIndex(x=>!x.checked||!kanaOnly(x.reading));
+ if(bad>=0)return alert(`${bad+1}番の読み方をひらがなで入力し、「確認しました」にチェックしてください。`);
+ const all=values.map(x=>x.reading),questions=[];
+ for(let i=0;i<values.length;i++){
+  const q=values[i],other=makeDistractors(q.reading,all.filter((_,j)=>j!==i));
+  if(other.length<3||new Set([q.reading,...other]).size!==4)return alert(`${i+1}番の選択肢を作成できませんでした。手動で問題を作成してください。`);
+  const options=[q.reading,...other];
+  // 選択肢の正解位置を分散
+  const shift=i%4;for(let j=0;j<shift;j++)options.push(options.shift());
+  questions.push({prompt:q.word,options,answer:options.indexOf(q.reading),explanation:`[READING_CARD] ${$('readingBook').value} ${$('readingLesson').value.trim()}｜${q.word}：${q.reading}`});
+ }
+ questionsDraft.push(...questions);saveTeacherDraft();updateQuestionList();clearReadingPreview();
+ alert(`${questions.length}問を追加しました。下の「作成中」で選択肢を確認・編集してから配信してください。`);
+ $('draftList').scrollIntoView({behavior:'smooth'});
+}
+
 function mySub(id){return submissions.find(s=>s.assignment_id===id&&s.student_id===user.id)}
-function student(){if(tab==='written')return writtenStudent();if(tab==='home'){let pending=combinedStudentTasks().filter(a=>!closed(a)&&!(a._taskType==='written'?writtenAnswers.some(x=>x.test_id===a.id&&x.student_id===user.id):mySub(a.id)));return `<h2>こんにちは、${esc(profile.full_name)}さん</h2><div class="grid"><div class="metric"><strong>${pending.length}</strong>未提出</div><div class="metric"><strong>${submissions.length+writtenAnswers.filter(x=>x.student_id===user.id).length}</strong>提出済み</div></div><div class="card"><h3>提出する課題</h3>${pending.map(a=>`<div class="question"><strong>${esc(a.title)}</strong><p>締切：${fmt(a.deadline)}</p><button class="primary" onclick="${a._taskType==='written'?`openWrittenFromTasks('${a.id}',false)`:`openAssignment('${a.id}')`}">回答する</button></div>`).join('')||'現在、未提出の課題はありません。'}</div>`}
+function student(){if(tab==='learned')return learnedWordsPage();if(tab==='written')return writtenStudent();if(tab==='home'){let pending=combinedStudentTasks().filter(a=>!closed(a)&&!(a._taskType==='written'?writtenAnswers.some(x=>x.test_id===a.id&&x.student_id===user.id):mySub(a.id)));return `<h2>こんにちは、${esc(profile.full_name)}さん</h2><div class="grid"><div class="metric"><strong>${pending.length}</strong>未提出</div><div class="metric"><strong>${submissions.length+writtenAnswers.filter(x=>x.student_id===user.id).length}</strong>提出済み</div></div><div class="card"><h3>提出する課題</h3>${pending.map(a=>`<div class="question"><strong>${esc(a.title)}</strong><p>締切：${fmt(a.deadline)}</p><button class="primary" onclick="${a._taskType==='written'?`openWrittenFromTasks('${a.id}',false)`:`openAssignment('${a.id}')`}">回答する</button></div>`).join('')||'現在、未提出の課題はありません。'}</div>`}
 if(tab==='study')return `<h2>言葉・文法</h2><div class="study-tools"><input id="studySearch" placeholder="言葉・読み方・意味を検索" oninput="filterStudy()"><select id="studyKind" onchange="filterStudy()"><option value="all">すべて</option><option value="vocab">言葉</option><option value="grammar">文法</option></select></div><p class="mutedtext" id="studyCount">${materials.length}件</p><div id="studyItems">${studyCards()}</div>`;
-if(tab==='assignments')return `<h2>私の課題</h2><p class="mutedtext">選択式・記述式の課題をまとめて表示しています。</p>${combinedStudentTasks().map(studentTaskCard).join('')||'<div class="card">課題がありません。</div>'}`;if(tab==='grades')return `<h2>私の成績</h2>${assignments.filter(a=>mySub(a.id)).map(a=>`<div class="card"><strong>${esc(a.title)}</strong><p>${closed(a)?`${mySub(a.id).score}点`:'締切後に成績公開'}</p></div>`).join('')||'<div class="card">提出履歴はありません。</div>'}`}
+if(tab==='assignments')return `<h2>私の課題</h2><p class="mutedtext">選択式・記述式の課題をまとめて表示しています。</p>${combinedStudentTasks().map(studentTaskCard).join('')||'<div class="card">課題がありません。</div>'}<div id="wStudentForm"></div>`;if(tab==='grades')return studentGradesPage()}
+
+// 学生：学んだ単語（提出済み・締切後の読み方問題を復習）
+let learnedCache=[],learnedIndex=0,learnedFlipped=false,learnedBusy=false;
+function learnedWordsPage(){
+ const eligible=assignments.filter(a=>closed(a)&&mySub(a.id));
+ return `<h2>学んだ単語</h2><div class="card"><p class="mutedtext">提出済みの読み方テストから単語を集めます。カードをタップすると読み方が見られます。復習は何度でもできます。</p><button class="primary" onclick="loadLearnedWords()" ${learnedBusy?'disabled':''}>${learnedBusy?'読み込み中...':'学んだ単語を表示'}</button><p class="mutedtext">復習できる課題：${eligible.length}件（締切後のみ）</p></div><div id="learnedArea">${learnedCache.length?learnedCardHtml():'<div class="card">「学んだ単語を表示」を押してください。</div>'}</div>`;
+}
+async function loadLearnedWords(){
+ if(learnedBusy)return;learnedBusy=true;let area=$('learnedArea');if(area)area.innerHTML='<div class="card">単語を読み込んでいます...</div>';
+ try{
+  const eligible=assignments.filter(a=>closed(a)&&mySub(a.id));const found=new Map();let failures=0;
+  for(const a of eligible){
+   const r=await sb.rpc('get_assignment_questions',{p_assignment:a.id});if(r.error){failures++;continue;}
+   for(const q of r.data||[]){if(!isReadingCard(q))continue;
+    const word=String(q.prompt||'').trim();const reading=q.options?.[q.answer];
+    if(word&&reading&&!found.has(word+'|'+reading))found.set(word+'|'+reading,{word,reading,title:a.title});
+   }
+  }
+  learnedCache=[...found.values()];learnedIndex=0;learnedFlipped=false;
+  if($('learnedArea'))$('learnedArea').innerHTML=(failures?`<p class="notice">${failures}件の課題は読み込めませんでした。</p>`:'')+learnedCardHtml();
+ }catch(e){warn(e)}finally{learnedBusy=false}
+}
+function learnedCardHtml(){
+ if(!learnedCache.length)return '<div class="card">復習できる読み方の単語はまだありません。テスト提出後、締切が過ぎると表示できます。</div>';
+ const q=learnedCache[learnedIndex];return `<div class="card"><div class="row"><strong>${learnedIndex+1} / ${learnedCache.length}</strong><small>${esc(q.title)}</small></div><button class="learned-flashcard" onclick="flipLearned()"><small>${learnedFlipped?'読み方':'漢字'}</small><span>${esc(learnedFlipped?q.reading:q.word)}</span><small>タップして${learnedFlipped?'漢字に戻る':'読み方を見る'}</small></button><div class="reading-navigation"><button onclick="moveLearned(-1)" ${learnedIndex===0?'disabled':''}>前へ</button><button class="primary" onclick="moveLearned(1)" ${learnedIndex===learnedCache.length-1?'disabled':''}>次へ</button></div></div>`;
+}
+function flipLearned(){learnedFlipped=!learnedFlipped;if($('learnedArea'))$('learnedArea').innerHTML=learnedCardHtml()}
+function moveLearned(d){learnedIndex=Math.max(0,Math.min(learnedCache.length-1,learnedIndex+d));learnedFlipped=false;if($('learnedArea'))$('learnedArea').innerHTML=learnedCardHtml()}
+function studentGradesPage(){
+ const all=combinedStudentTasks().filter(a=>a._taskType==='written'?writtenAnswers.some(x=>x.test_id===a.id&&x.student_id===user.id):mySub(a.id));
+ return `<h2>私の成績</h2>${all.map(a=>{const written=a._taskType==='written',r=written?writtenAnswers.find(x=>x.test_id===a.id&&x.student_id===user.id):mySub(a.id);const pending=written&&r.grades?.some(g=>g===null);const max=written?a.questions.reduce((sum,q)=>sum+(q.kind==='vocab'?1:2),0):null;const score=written?r.grades?.reduce((sum,g)=>sum+(g||0),0):r.score;return `<div class="card"><div class="row"><strong>${esc(a.title)}</strong><span class="pill">${written?'記述式':'選択式'}</span></div><p>${closed(a)?(pending?'採点中':`得点：${esc(score)}${written?' / '+max:''} 点`):'締切後に成績公開'}</p></div>`}).join('')||'<div class="card">提出履歴はありません。</div>'}`;
+}
 function studyCards(){return materials.map(m=>`<div class="card study-card" data-kind="${esc(m.kind)}" data-search="${esc([m.term,m.reading,m.meaning,m.example].join(' ').toLowerCase())}"><details class="study-details"><summary><span class="pill">${m.kind==='vocab'?'言葉':'文法'}</span>　${esc(m.term)} ${m.reading?`<small>（${esc(m.reading)}）</small>`:''}</summary><p><strong>意味・説明：</strong>${esc(m.meaning||'未登録')}</p>${m.example?`<p><strong>例文：</strong>${esc(m.example)}</p>`:''}</details></div>`).join('')||'<div class="card">教材はまだ登録されていません。</div>'}
 function filterStudy(){let q=($('studySearch')?.value||'').trim().toLowerCase(),kind=$('studyKind')?.value||'all',n=0;document.querySelectorAll('.study-card').forEach(el=>{let visible=(kind==='all'||el.dataset.kind===kind)&&el.dataset.search.includes(q);el.classList.toggle('hidden',!visible);if(visible)n++});if($('studyCount'))$('studyCount').textContent=`${n}件`}
 function combinedStudentTasks(){return [...assignments.map(a=>({...a,_taskType:'choice'})),...writtenTests.map(t=>({...t,_taskType:'written'}))].sort((a,b)=>new Date(a.deadline)-new Date(b.deadline))}
 function studentTaskCard(a){const written=a._taskType==='written',r=written?writtenAnswers.find(x=>x.test_id===a.id&&x.student_id===user.id):mySub(a.id);return `<div class="card"><div class="row"><strong>${esc(a.title)}</strong><span class="pill">${written?'記述式':'選択式'}</span></div><p>締切：${fmt(a.deadline)}</p><span class="pill ${r?'ok':closed(a)?'warn':''}">${r?'提出済み':closed(a)?'締切終了':'未提出'}</span><p>${r?(closed(a)?(written?'採点結果を確認できます。':`得点：${r.score}点`):'締切後に結果を公開します。'):''}</p>${r&&closed(a)?`<button onclick="${written?`openWrittenFromTasks('${a.id}',true)`:`openAssignment('${a.id}',true)`}">${written?'結果・解説を見る':'正解・解説'}</button>`:!r&&!closed(a)?`<button class="primary" onclick="${written?`openWrittenFromTasks('${a.id}',false)`:`openAssignment('${a.id}')`}">回答する</button>`:''}</div>`}
-function openWrittenFromTasks(id,review){tab='written';render();if(review)writtenReview(id);else writtenOpen(id)}
-async function openAssignment(id,review=false){let a=assignments.find(x=>x.id===id);if(!a)return;if(!review&&(closed(a)||mySub(id)))return alert('回答できません');let r=await sb.rpc('get_assignment_questions',{p_assignment:id});if(r.error)return warn(r.error);let qs=r.data;if(review&&(!closed(a)||!mySub(id)))return;opened={a,qs,review};answerDraft=review?mySub(id).answers:(JSON.parse(localStorage.getItem('draft_'+user.id+'_'+id)||'{}'));drawAssignment()}
-function drawAssignment(){let {a,qs,review}=opened;$('screen').innerHTML=`<div class="row"><h2>${esc(a.title)}</h2><button onclick="render()">戻る</button></div><div class="notice">${review?'締切後の正解・解説です。':'回答はこの端末に一時保存されます。提出は1回です。'}</div>${qs.map((q,i)=>`<div class="card"><h3>問題 ${i+1}</h3><p>${esc(q.prompt)}</p>${q.options.map((o,j)=>`<label class="option"><input type="radio" name="q${i}" ${answerDraft[q.id]===j?'checked':''} ${review?'disabled':''} onchange="saveAnswer('${q.id}',${j})">${esc(o)}</label>`).join('')}${review?`<p><strong>正解：${esc(q.options[q.answer])}</strong></p><small>${esc(q.explanation)}</small>`:''}</div>`).join('')}${review?'':`<button class="primary wide" onclick="submitNow()">提出する</button>`}`}
+function openWrittenFromTasks(id,review){tab='assignments';render();if(review)writtenReview(id);else writtenOpen(id)}
+async function openAssignment(id,review=false){let a=assignments.find(x=>x.id===id);if(!a)return;if(!review&&(closed(a)||mySub(id)))return alert('回答できません');let r=await sb.rpc('get_assignment_questions',{p_assignment:id});if(r.error)return warn(r.error);let qs=r.data;if(review&&(!closed(a)||!mySub(id)))return;opened={a,qs,review,cardIndex:0};answerDraft=review?mySub(id).answers:(JSON.parse(localStorage.getItem('draft_'+user.id+'_'+id)||'{}'));drawAssignment()}
+function isReadingCard(q){
+ // 旧版で配信された読み方問題もカード表示する（タグがない問題を含む）。
+ if(String(q.explanation||'').startsWith('[READING_CARD]'))return true;
+ const prompt=String(q.prompt||'').trim();
+ const opts=Array.isArray(q.options)?q.options:[];
+ const bare=prompt.replace(/[「」『』\s]/g,'').replace(/の読み方として正しいものを選んでください[。．.]?/g,'').replace(/の読み方は[？?]?/g,'');
+ return /[一-龯々〆ヵヶ]/.test(bare)&&opts.length===4&&opts.every(x=>/^[ぁ-ゖァ-ヺー\s]+$/.test(String(x||'').trim()));
+}
+function readingWord(q){return String(q.prompt||'').trim().replace(/^「([^」]+)」の読み方として正しいものを選んでください[。．.]?$/,'$1').replace(/^「([^」]+)」の読み方は[？?]?$/,'$1')}
+
+function drawAssignment(){
+ let {a,qs,review}=opened;
+ if(qs.length&&qs.every(isReadingCard))return drawReadingCard();
+ $('screen').innerHTML=`<div class="row"><h2>${esc(a.title)}</h2><button onclick="render()">戻る</button></div><div class="notice">${review?'締切後の正解・解説です。':'回答はこの端末に一時保存されます。提出は1回です。'}</div>${qs.map((q,i)=>`<div class="card"><h3>問題 ${i+1}</h3><p>${esc(q.prompt)}</p>${q.options.map((o,j)=>`<label class="option"><input type="radio" name="q${i}" ${answerDraft[q.id]===j?'checked':''} ${review?'disabled':''} onchange="saveAnswer('${q.id}',${j})">${esc(o)}</label>`).join('')}${review?`<p><strong>正解：${esc(q.options[q.answer])}</strong></p><small>${esc(q.explanation)}</small>`:''}</div>`).join('')}${review?'':`<button class="primary wide" onclick="submitNow()">提出する</button>`}`;
+}
+function drawReadingCard(){
+ const {a,qs,review}=opened;
+ const i=Math.max(0,Math.min(opened.cardIndex||0,qs.length-1));opened.cardIndex=i;
+ const q=qs[i],selected=answerDraft[q.id];
+ $('screen').innerHTML=`<div class="row"><h2>${esc(a.title)}</h2><button onclick="render()">戻る</button></div><p class="reading-progress">問題 ${i+1} / ${qs.length}　・　回答済み ${qs.filter(x=>answerDraft[x.id]!==undefined).length}問</p><div class="reading-card"><div class="reading-word">${esc(readingWord(q))}</div><div class="reading-options">${q.options.map((o,j)=>`<button class="reading-option ${selected===j?'selected':''}" ${review?'disabled':''} onclick="chooseReadingCard(${j})">${esc(o)}</button>`).join('')}</div>${review?`<p class="reading-review">正解：${esc(q.options[q.answer])}</p>`:''}</div><div class="reading-navigation"><button ${i===0?'disabled':''} onclick="moveReadingCard(-1)">前へ</button>${i===qs.length-1?(review?'<button disabled>最後の問題</button>':'<button class="primary" onclick="submitNow()">提出する</button>'):`<button class="primary" onclick="moveReadingCard(1)">次へ</button>`}</div>`;
+}
+function chooseReadingCard(j){if(!opened||opened.review)return;const q=opened.qs[opened.cardIndex];saveAnswer(q.id,j);drawReadingCard()}
+function moveReadingCard(delta){if(!opened)return;opened.cardIndex=Math.max(0,Math.min(opened.qs.length-1,opened.cardIndex+delta));drawReadingCard()}
+
 function saveAnswer(id,v){answerDraft[id]=v;localStorage.setItem('draft_'+user.id+'_'+opened.a.id,JSON.stringify(answerDraft))}
 async function submitNow(){let {a,qs}=opened;if(closed(a))return alert('締切終了');let missing=qs.filter(q=>answerDraft[q.id]===undefined).length;if(missing&&!confirm(`未回答が${missing}問あります。提出しますか？`))return;if(!confirm('提出後は変更できません。提出しますか？'))return;let r=await sb.rpc('submit_assignment',{p_assignment:a.id,p_answers:answerDraft});if(r.error)return warn(r.error);localStorage.removeItem('draft_'+user.id+'_'+a.id);opened=null;tab='assignments';await refresh();alert('提出しました！')}
 
 // 記述式テスト（旧選択式テストとは独立）
 async function loadWritten(){let a=await sb.rpc('get_written_tests');if(a.error){writtenTests=[];console.error('記述式テストの取得に失敗:',a.error);return}writtenTests=a.data||[];if(profile.role!=='teacher')writtenTests=writtenTests.filter(t=>members.some(m=>m.class_id===t.class_id));let r=await sb.from('written_answers').select('*');writtenAnswers=r.data||[]}
 let writtenDraft=[],writtenEditing=-1,writtenPublishedEditing=null;
-const writtenKey=()=>`written_draft_${user?.id}`;
+const writtenKey=()=>`written_draft_${writtenMode}_${user?.id}`;
 function recoverWritten(){try{let x=JSON.parse(localStorage.getItem(writtenKey())||'{}');writtenDraft=x.questions||[];return x}catch(e){return {}}}
 function persistWritten(){let old=JSON.parse(localStorage.getItem(writtenKey())||'{}'),x={questions:writtenDraft,title:$('wtTitle')?.value??old.title??'',deadline:$('wtDeadline')?.value??old.deadline??'',classId:$('wtClass')?.value??old.classId??''};localStorage.setItem(writtenKey(),JSON.stringify(x))}
 function writtenTeacher(){let d=recoverWritten();return `<h2>記述式テスト</h2><div class="card"><h3 id="writtenFormHeading">新しいテスト</h3><div id="writtenEditNotice"></div><label>クラス</label><select id="wtClass" onchange="persistWritten()">${classes.map(c=>`<option value="${c.id}" ${String(d.classId)===String(c.id)?'selected':''}>${esc(c.name)}</option>`).join('')}</select><label>テスト名</label><input id="wtTitle" value="${esc(d.title||'')}" oninput="persistWritten()" placeholder="例：N2 語彙・文法"><label>締切</label><input type="datetime-local" id="wtDeadline" value="${esc(d.deadline||'')}" onchange="persistWritten()"><p class="notice">語彙はひらがな入力・自動採点（1点）。文法は自由作文・教師採点（0～2点）。学生は締切後に結果を確認できます。</p><div class="written-item"><h3 id="wEditTitle">問題を追加</h3><label>問題の種類</label><select id="wType" onchange="writtenTypeChange()"><option value="vocab">語彙・読み方（1点）</option><option value="grammar">文法・作文（2点）</option></select><label>問題文・漢字・文法項目</label><textarea id="wPrompt" placeholder="例：改善"></textarea><div id="wReading"><label>正解のひらがな（複数の正解は | で区切る）</label><input id="wExpected" placeholder="かいぜん"></div><label>解説・模範文（任意）</label><textarea id="wExplain"></textarea><div class="stack"><button class="primary" onclick="writtenAdd()">＋ 保存して次の問題へ</button><button onclick="writtenReset()">入力をクリア</button></div></div><h3>作成中：${writtenDraft.length}問</h3><div id="wDraftList">${writtenDraftList()}</div><button class="primary wide" id="writtenPublishBtn" onclick="writtenPublish()">記述式テストを配信</button><button id="writtenCancelBtn" class="hidden wide" onclick="writtenCancelPublishedEdit()">編集をキャンセル</button></div><h3>配信済みの記述式テスト</h3>${writtenTests.map(t=>`<div class="card"><div class="row"><strong>${esc(t.title)}</strong><div class="stack"><button onclick="writtenView('${t.id}')">詳細</button><button onclick="writtenEditPublished('${t.id}')">編集</button><button onclick="writtenResults('${t.id}')">提出・採点</button><button class="danger" onclick="writtenDeletePublished('${t.id}')">削除</button></div></div><p class="mutedtext">締切：${fmt(t.deadline)} / ${closed(t)?'締切終了':'受付中'}</p></div>`).join('')||'<div class="card">まだありません。</div>'}<div id="wResults"></div>`}
 function writtenDraftList(){return writtenDraft.map((q,i)=>`<div class="written-item"><div class="row"><strong>${i+1}. ${esc(q.prompt)}</strong><span class="written-tag">${q.kind==='vocab'?'語彙':'作文'}</span></div><small>${q.kind==='vocab'?'正解：'+esc(q.expected):'教師が採点'}</small><div class="stack"><button onclick="writtenEdit(${i})">編集</button><button onclick="writtenDuplicate(${i})">複製</button><button class="danger" onclick="writtenRemove(${i})">削除</button></div></div>`).join('')||'<p class="muted">問題はまだありません。</p>'}
 function writtenUpdate(){$('wDraftList').innerHTML=writtenDraftList();document.querySelector('#wDraftList').previousElementSibling.textContent=`作成中：${writtenDraft.length}問`}
 function writtenTypeChange(){$('wReading').classList.toggle('hidden',$('wType').value!=='vocab')}
-function writtenReset(){writtenEditing=-1;$('wPrompt').value='';$('wExpected').value='';$('wExplain').value='';$('wType').value='vocab';writtenTypeChange();$('wEditTitle').textContent='問題を追加'}
+function writtenReset(){writtenEditing=-1;$('wPrompt').value='';$('wExpected').value='';$('wExplain').value='';$('wType').value=writtenMode==='grammar'?'grammar':'vocab';writtenTypeChange();$('wEditTitle').textContent='問題を追加'}
 function writtenAdd(){let kind=$('wType').value,prompt=$('wPrompt').value.trim(),expected=$('wExpected').value.trim(),explanation=$('wExplain').value.trim();if(!prompt||(kind==='vocab'&&!expected))return alert('問題文と正解を入力してください');let q={kind,prompt,expected:kind==='vocab'?expected:'',explanation};if(writtenEditing<0)writtenDraft.push(q);else writtenDraft[writtenEditing]=q;writtenReset();persistWritten();writtenUpdate();$('wPrompt').focus()}
-function writtenEdit(i){let q=writtenDraft[i];writtenEditing=i;$('wType').value=q.kind;$('wPrompt').value=q.prompt;$('wExpected').value=q.expected;$('wExplain').value=q.explanation;writtenTypeChange();$('wEditTitle').textContent=`問題 ${i+1} を編集`;$('wPrompt').scrollIntoView({behavior:'smooth'})}
+function writtenEdit(i){let q=writtenDraft[i];if(q.kind!==(writtenMode==='grammar'?'grammar':'vocab'))return alert('この問題は別の出題ページで編集してください。');writtenEditing=i;$('wType').value=q.kind;$('wPrompt').value=q.prompt;$('wExpected').value=q.expected;$('wExplain').value=q.explanation;writtenTypeChange();$('wEditTitle').textContent=`問題 ${i+1} を編集`;$('wPrompt').scrollIntoView({behavior:'smooth'})}
 function writtenDuplicate(i){writtenDraft.splice(i+1,0,{...writtenDraft[i]});persistWritten();writtenUpdate()}
 function writtenRemove(i){writtenDraft.splice(i,1);writtenReset();persistWritten();writtenUpdate()}
 async function writtenPublish(){
@@ -207,7 +358,7 @@ async function manageView(type,id){
 }
 async function manageEdit(type,id){
  if(profile.role!=='teacher')return;
- if(type==='written'){go('written');writtenEditPublished(id);return;}
+ if(type==='written'){let t=writtenTests.find(x=>x.id===id);writtenMode=t?.questions?.[0]?.kind==='grammar'?'grammar':'vocab';go('written');writtenEditPublished(id);return;}
  const a=assignments.find(x=>x.id===id);if(!a)return;
  const count=submissions.filter(x=>x.assignment_id===id).length;
  const r=await sb.rpc('get_assignment_questions',{p_assignment:id});
@@ -266,14 +417,17 @@ function manageSubmissions(type,id){
 }
 async function manageDelete(type,id){
  if(profile.role!=='teacher')return;
- if(type==='written'){await writtenDeletePublished(id);return;}
- const a=assignments.find(x=>x.id===id);if(!a)return;
- const count=submissions.filter(x=>x.assignment_id===id).length;
- if(count)return alert(`${count}件の提出があります。成績を保護するため削除できません。`);
- if(!confirm(`「${a.title}」を削除しますか？この操作は取り消せません。`))return;
- const r=await sb.from('assignments').delete().eq('id',id).select('id');
- if(r.error)return warn(r.error);if(!r.data?.length)return alert('削除できません。既存の問題との参照関係またはSupabaseの権限を確認してください。');
- await refresh();alert('削除しました');
+ const item=type==='written'?writtenTests.find(x=>String(x.id)===String(id)):assignments.find(x=>String(x.id)===String(id));
+ if(!item)return;
+ const count=type==='written'?writtenAnswers.filter(x=>String(x.test_id)===String(id)).length:submissions.filter(x=>String(x.assignment_id)===String(id)).length;
+ if(!confirm(`「${item.title}」を削除しますか？\n提出済み：${count}件\nこの課題の学生の回答と成績も完全に削除されます。`))return;
+ if(count && !confirm(`最終確認：${count}件の提出記録を含めて完全削除します。復元できません。よろしいですか？`))return;
+ const r=await sb.rpc('teacher_delete_task',{p_type:type,p_id:String(id)});
+ if(r.error)return alert('削除できませんでした。Supabaseで削除用SQLを設定してください。\n'+r.error.message);
+ if(writtenPublishedEditing?.id===id)writtenPublishedEditing=null;
+ await refresh();alert('課題と関連する提出記録を削除しました。');
 }
+async function writtenDeletePublished(id){return manageDelete('written',id)}
+
 boot().catch(warn);
 </script></body></html>

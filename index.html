@@ -9,6 +9,11 @@
 .mode-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin-top:20px}.mode-tile{display:flex;flex-direction:column;align-items:flex-start;gap:12px;text-align:left;background:white;border:1px solid #dfe6f1;padding:28px;border-radius:19px;min-height:135px}.mode-tile strong{font-size:21px}.mode-tile small{font-size:13px;line-height:1.6}@media(max-width:600px){.mode-grid{grid-template-columns:1fr}.mode-tile{min-height:105px;padding:20px}}.learned-flashcard{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;width:100%;min-height:310px;margin:18px 0;border:1px solid #dce5fa;background:linear-gradient(145deg,#fff,#f1f5ff);border-radius:22px;box-shadow:0 5px 18px #253f7312;color:#263347}.learned-flashcard span{font-size:clamp(30px,8vw,55px);font-weight:750;overflow-wrap:anywhere}.learned-flashcard small{font-size:13px;color:#72819b}.reading-navigation{display:flex;justify-content:space-between;gap:12px}.reading-navigation button{flex:1}.score-table{width:100%;border-collapse:collapse;font-size:13px}.score-table th,.score-table td{border-bottom:1px solid #e6ebf2;padding:9px;text-align:left}.score-table input{min-width:76px;padding:8px}.score-scroll{overflow-x:auto}.score-table th{white-space:nowrap;background:#f5f7fb}.score-chart{display:flex;align-items:end;gap:10px;height:155px;border-bottom:1px solid #ccd6e8;padding:12px 4px}.score-bar{flex:1;max-width:80px;text-align:center;font-size:11px}.score-bar>div{background:#6a8ae9;border-radius:6px 6px 0 0;min-height:2px}.score-bar small{display:block;overflow-wrap:anywhere}.score-badge{font-size:12px;background:#eef2ff;border-radius:20px;padding:4px 8px} 
 /* 記述問題：スマートフォン向けシンプルデザイン */
 .written-quiz{max-width:680px;margin:12px auto}.written-quiz .written-intro{padding:12px 15px;background:#f0f4fc;border-radius:13px;color:#526581;font-size:13px;line-height:1.7;margin:14px 0 20px}.written-quiz .written-item{border:0;padding:6px 0 0;margin:0}.written-quiz .written-counter{font-size:13px;font-weight:750;color:#64748b;letter-spacing:.03em}.written-quiz .written-track{height:7px;background:#e9eef7;border-radius:20px;overflow:hidden;margin:11px 0 26px}.written-quiz .written-fill{height:100%;background:#496fe0;border-radius:20px}.written-quiz .written-type{display:inline-block;background:#edf2ff;color:#4766af;border-radius:50px;padding:6px 12px;font-size:12px;font-weight:700}.written-quiz .written-prompt{font-size:clamp(25px,6vw,37px);font-weight:800;text-align:center;line-height:1.55;padding:26px 8px 30px;overflow-wrap:anywhere}.written-quiz .written-input-label{font-size:13px;font-weight:700;color:#607089;margin:0 0 9px}.written-quiz .written-answer{font-size:21px;text-align:center;min-height:65px;border:2px solid #dce5f4;border-radius:15px;background:#fafcff;letter-spacing:.03em}.written-quiz textarea.written-answer{text-align:left;font-size:17px;min-height:120px}.written-quiz .written-answer:focus{outline:none;border-color:#496fe0;box-shadow:0 0 0 4px #496fe01c;background:#fff}.written-quiz .written-action{margin-top:20px;min-height:55px;font-size:16px;border-radius:14px}.written-quiz .written-feedback{margin-top:16px}.written-quiz .written-feedback .status{border-radius:14px;line-height:1.6}.written-quiz .written-feedback .status p{margin:9px 0 0}.written-quiz .written-finish{text-align:center;padding:30px 5px}.written-quiz .written-finish strong{display:block;font-size:23px;margin-bottom:12px}
+
+/* 正誤は小さなマークのみ。表示前後でカードの高さを変えない */
+.quiz-answer-area{height:42px;display:flex;align-items:center;justify-content:center;margin:0 0 10px}
+.answer-mark{font-size:29px;line-height:1;display:inline-flex;align-items:center;justify-content:center;font-weight:800}
+.answer-mark-good{color:#16844b}.answer-mark-bad{color:#d43e4e}.answer-mark-unknown{color:#b78528}
 </style></head><body><div id="app"><div class="auth card">読み込み中...</div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -367,7 +372,26 @@ function showWrittenOnly(){
  document.getElementById('bottom')?.classList.add('hidden');
  window.scrollTo(0,0);
 }
-async function openAssignment(id,review=false){let a=assignments.find(x=>x.id===id);if(!a)return;if(!review&&(closed(a)||mySub(id)))return alert('回答できません');let r=await sb.rpc('get_assignment_questions',{p_assignment:id});if(r.error)return warn(r.error);let qs=r.data;if(review&&(!closed(a)||!mySub(id)))return;const key='draft_'+user.id+'_'+id;const stored=review?{}:JSON.parse(localStorage.getItem(key)||'{}');const attempt=review?1:Math.max(1,Number(localStorage.getItem('attempt_'+user.id+'_'+id)||1));if(!review&&qs.length&&qs.every(q=>stored[q.id]!==undefined)){const correct=qs.every(q=>q.answer!=null&&Number(stored[q.id])===Number(q.answer));if(!correct){localStorage.removeItem(key);localStorage.setItem('attempt_'+user.id+'_'+id,String(attempt+1));Object.keys(stored).forEach(k=>delete stored[k]);}}opened={a,qs,review,cardIndex:0,attempt,roundFinished:false};answerDraft=review?mySub(id).answers:stored;drawAssignment()}
+async function openAssignment(id,review=false){
+ let a=assignments.find(x=>x.id===id);if(!a)return;
+ if(!review&&(closed(a)||mySub(id)))return alert('回答できません');
+ let r=await sb.rpc('get_assignment_questions',{p_assignment:id});if(r.error)return warn(r.error);
+ let qs=r.data;if(review&&(!closed(a)||!mySub(id)))return;
+ const key='draft_'+user.id+'_'+id;
+ const attemptKey='attempt_'+user.id+'_'+id;
+ let attempt=1;
+ if(!review){
+  // 再入場時は必ず第1問から。前回の回答は一切引き継がない。
+  let hadPreviousAnswers=false;
+  try{const old=JSON.parse(localStorage.getItem(key)||'{}');hadPreviousAnswers=Object.keys(old).length>0;}catch(e){hadPreviousAnswers=true;}
+  attempt=Math.max(1,Number(localStorage.getItem(attemptKey)||1));
+  if(hadPreviousAnswers){attempt++;localStorage.setItem(attemptKey,String(attempt));}
+  localStorage.removeItem(key);
+ }
+ opened={a,qs,review,cardIndex:0,attempt,roundFinished:false};
+ answerDraft=review?(mySub(id)?.answers||{}):{};
+ drawAssignment();
+}
 function isReadingCard(q){
   if(String(q.explanation||'').startsWith('[MEANING_CHOICE]'))return false;
  // 旧版で配信された読み方問題もカード表示する（タグがない問題を含む）。
@@ -379,16 +403,6 @@ function isReadingCard(q){
 }
 function readingWord(q){return String(q.prompt||'').trim().replace(/^「([^」]+)」の読み方として正しいものを選んでください[。．.]?$/,'$1').replace(/^「([^」]+)」の読み方は[？?]?$/,'$1')}
 
-function feedbackChoice(q){
- const selected=answerDraft[q.id];
- if(selected===undefined)return '';
- const answerIndex=q.answer===null||q.answer===undefined?null:Number(q.answer);
- const known=Number.isInteger(answerIndex)&&answerIndex>=0&&answerIndex<q.options.length;
- const correct=known&&Number(selected)===answerIndex;
- const color=known?(correct?'#279767':'#d84d5c'):'#c99435';
- const bg=known?(correct?'#e5f7ed':'#fff0f1'):'#fff9e9';
- return `<div style="margin:14px 0;padding:14px;border-radius:12px;border:2px solid ${color};background:${bg};text-align:center;font-size:21px;font-weight:800" role="status" aria-live="polite">${known?(correct?'✅ 正解！':'❌ 不正解'):'⚠️ 回答済み・正誤判定待ち'}${known&&!correct?`<div style="font-size:14px;margin-top:8px">もう一度選んでください</div>`:''}${!known?'<div style="font-size:13px;margin-top:8px">先生に正誤判定の設定を確認してください。</div>':''}</div>`;
-}
 function drawAssignment(){
  if(!opened)return;
  const {a,qs,review}=opened;
@@ -398,7 +412,7 @@ function drawAssignment(){
  const reading=isReadingCard(q);
  const answerIndex=q.answer===null||q.answer===undefined?null:Number(q.answer);
  const answerKnown=Number.isInteger(answerIndex)&&answerIndex>=0&&answerIndex<q.options.length;
- $('screen').innerHTML=`<div class="row"><h2>${esc(a.title)}</h2><button onclick="render()">戻る</button></div><p class="reading-progress">${!review?`第 ${opened.attempt} 回 ・ `:""}問題 ${i+1} / ${qs.length} ・ 回答済み ${qs.filter(x=>answerDraft[x.id]!==undefined).length}問 ・ 正解 ${qs.filter(x=>x.answer!=null&&answerDraft[x.id]!==undefined&&Number(answerDraft[x.id])===Number(x.answer)).length}問 / ${qs.length}問 <small style="font-size:10px">FIX-1118C</small></p><div class="${reading?'reading-card':'card'}">${reading?`<div class="reading-word">${esc(readingWord(q))}</div>`:`<h3>問題 ${i+1}</h3><p>${esc(q.prompt)}</p>`}${!review?feedbackChoice(q):''}<div class="${reading?'reading-options':''}">${q.options.map((o,j)=>`<button class="${reading?'reading-option':'option wide'} ${answered&&answerKnown&&j===answerIndex?'correct-answer':''} ${answered&&answerKnown&&Number(selected)===j&&j!==answerIndex?'wrong-answer':''} ${selected===j?'selected':''}" style="${!reading?'text-align:left;':''}" ${review||answered?'disabled':''} onclick="chooseAssignmentAnswer(${j})">${esc(o)}${(answered||review)&&answerKnown?(j===answerIndex?' ✓':Number(selected)===j?' ✕':''):''}</button>`).join('')}</div>${review?`<div class="status"><strong>正解：${esc(q.options[q.answer]??'未公開')}</strong><p>${esc(q.explanation||'')}</p></div>`:''}</div><div class="reading-navigation"><button ${i===0?'disabled':''} onclick="moveReadingCard(-1)">前へ</button>${i===qs.length-1?(review?'<button disabled>最後の問題</button>':`<button class="primary" onclick="submitNow()" ${!answered?'disabled':''}>今回の結果を見る</button>`):`<button class="primary" onclick="moveReadingCard(1)" ${!review&&!answered?'disabled':''}>次の問題へ</button>`}</div>${!review&&i===qs.length-1?'<p class="mutedtext" style="text-align:center">1問につき選択は1回だけです。間違えても次へ進めます。全問正解できなかった場合は、最初からもう一度挑戦してください。</p>':''}`;
+ $('screen').innerHTML=`<div class="row"><h2>${esc(a.title)}</h2><button onclick="render()">戻る</button></div><p class="reading-progress">${!review?`第 ${opened.attempt} 回 ・ `:""}問題 ${i+1} / ${qs.length} ・ 回答済み ${qs.filter(x=>answerDraft[x.id]!==undefined).length}問 ・ 正解 ${qs.filter(x=>x.answer!=null&&answerDraft[x.id]!==undefined&&Number(answerDraft[x.id])===Number(x.answer)).length}問 / ${qs.length}問 <small style="font-size:10px">FIX-1118C</small></p><div class="${reading?'reading-card':'card'}">${reading?`<div class="reading-word">${esc(readingWord(q))}</div>`:`<h3>問題 ${i+1}</h3><p>${esc(q.prompt)}</p>`}<div class="quiz-answer-area"></div><div class="${reading?'reading-options':''}">${q.options.map((o,j)=>`<button class="${reading?'reading-option':'option wide'} ${answered&&answerKnown&&j===answerIndex?'correct-answer':''} ${answered&&answerKnown&&Number(selected)===j&&j!==answerIndex?'wrong-answer':''} ${selected===j?'selected':''}" style="${!reading?'text-align:left;':''}" ${review||answered?'disabled':''} onclick="chooseAssignmentAnswer(${j})">${esc(o)}${(answered||review)&&answerKnown?(j===answerIndex?' ✓':Number(selected)===j?' ✕':''):''}</button>`).join('')}</div>${review?`<div class="status"><strong>正解：${esc(q.options[q.answer]??'未公開')}</strong><p>${esc(q.explanation||'')}</p></div>`:''}</div><div class="reading-navigation"><button ${i===0?'disabled':''} onclick="moveReadingCard(-1)">前へ</button>${i===qs.length-1?(review?'<button disabled>最後の問題</button>':`<button class="primary" onclick="submitNow()" ${!answered?'disabled':''}>今回の結果を見る</button>`):`<button class="primary" onclick="moveReadingCard(1)" ${!review&&!answered?'disabled':''}>次の問題へ</button>`}</div>${!review&&i===qs.length-1?'<p class="mutedtext" style="text-align:center">1問につき選択は1回だけです。間違えても次へ進めます。全問正解できなかった場合は、最初からもう一度挑戦してください。</p>':''}`;
 }
 function drawReadingCard(){drawAssignment()}
 function chooseAssignmentAnswer(j){if(!opened||opened.review)return;const q=opened.qs[opened.cardIndex];if(answerDraft[q.id]!==undefined)return;saveAnswer(q.id,j);drawAssignment()}

@@ -101,6 +101,24 @@ button.dv-review-link{background:#fff0db;color:#a66a25}
   .teacher-layout > .tabs button { font-size: 14px; padding: 13px 15px; }
 }
 .study-category-tabs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 14px}.study-category-tabs button{padding:14px;font-size:15px;border:1px solid #dce5f3;background:#fff}.study-category-tabs button.active{background:#496fe0;color:#fff;border-color:#496fe0}.study-tools{grid-template-columns:1fr!important}
+
+/* 2026-11-20: pastel quiz feedback; applies to both reading and standard options */
+.quiz-polished{background:#fffdfd;border:1px solid #eee5e9;box-shadow:0 10px 30px rgba(88,65,82,.055)}
+.quiz-polished .reading-word{color:#454352;padding:38px 10px 32px}
+.quiz-polished .reading-options{gap:12px}
+.quiz-options-standard{display:grid;gap:11px}
+.quiz-polished .quiz-choice{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:70px;padding:16px 19px;border:1.5px solid #e9e5eb;border-radius:17px;background:#fff;color:#4c4a57;box-shadow:0 2px 7px #62526b07;transition:background .16s,border-color .16s;opacity:1!important;-webkit-text-fill-color:currentColor!important}
+.quiz-polished .quiz-choice:not(:disabled):hover{background:#fcf8fc;border-color:#d8c9dc}
+.quiz-polished .quiz-choice.quiz-choice-good{background:#e9f6ee!important;border-color:#a8d9bc!important;color:#347853!important}
+.quiz-polished .quiz-choice.quiz-choice-bad{background:#fcebed!important;border-color:#e9b5bc!important;color:#ae5261!important}
+.quiz-polished .quiz-choice.quiz-choice-picked:not(.quiz-choice-good):not(.quiz-choice-bad){background:#f4f0f9}
+.quiz-choice-label{min-width:0;overflow-wrap:anywhere;text-align:left;flex:1}
+.quiz-choice-icon{display:grid;place-items:center;flex:0 0 29px;height:29px;border-radius:50%;background:#ffffffaa;font-size:18px;font-weight:800}
+.quiz-correction{margin:17px 0 0;padding:13px 17px;background:#f4f9f5;border:1px solid #dcece1;border-radius:14px;display:flex;flex-wrap:wrap;gap:8px 13px;align-items:center;color:#416b51;font-size:14px}
+.quiz-correction span{font-size:12px;color:#718879}.quiz-correction strong{font-size:16px}
+.quiz-correction-muted{background:#faf7f4;border-color:#eee5dd;color:#8b786c}
+.quiz-explanation{padding:12px 4px;color:#697386;font-size:14px}
+@media(max-width:480px){.quiz-polished .quiz-choice{min-height:67px;padding:13px 14px}.quiz-polished .reading-options{gap:9px}.quiz-polished{padding:17px}}
 </style></head><body><div id="app"><div class="auth card">読み込み中...</div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js">
 </script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
 // 紙の宿題：Supabase に保存し、締切後は学生画面から非表示
@@ -118,7 +136,18 @@ function paperLocalValue(v){const d=new Date(v);return new Intl.DateTimeFormat('
 async function paperSave(){const content=$('paperContent').value.trim(),raw=$('paperDeadline').value;if(!content||!raw)return alert('宿題の内容と提出期限を入力してください');const deadline=new Date(raw+':00+09:00');if(Number.isNaN(deadline.getTime()))return alert('日時を確認してください');const edit=paperHomework.find(h=>h.id===paperEditing);const targets=edit?[edit.class_id]:[selectedClassId];if(!edit&&$('paperShare')?.checked){for(const c of classes.filter(c=>/初中級B[ap]/i.test(c.name)))if(!targets.some(id=>String(id)===String(c.id)))targets.push(c.id)}const btn=document.querySelector('#screen button.primary');btn.disabled=true;try{for(const class_id of targets){const payload={content,deadline:deadline.toISOString(),class_id};const r=edit?await sb.from('paper_homework').update(payload).eq('id',edit.id).select('id'):await sb.from('paper_homework').insert({...payload,created_by:user.id}).select('id');if(r.error)throw r.error;if(!r.data?.length)throw Error('保存権限がありません')}paperEditing=null;await loadPaperHomework();render();alert('保存しました')}catch(e){alert('保存できませんでした：'+e.message);btn.disabled=false}}
 async function paperDelete(id){if(!confirm('この紙の宿題を削除しますか？'))return;const r=await sb.from('paper_homework').delete().eq('id',id).select('id');if(r.error||!r.data?.length)return alert('削除できませんでした：'+(r.error?.message||'権限がありません'));paperEditing=null;await loadPaperHomework();render()}
 // ページを開いたままでも期限切れを自動反映
-setInterval(()=>{if(profile?.role==='student'&&['home','paper'].includes(tab))render()},30000);
+// 期限切れの紙の宿題が実際に発生したときだけ画面を更新する。
+// 30秒ごとの無条件 render() は入力状態を消し、Safari の動作を不安定にする。
+let paperLastActiveIds=null;
+setInterval(()=>{
+  if(!profile || profile.role!=='student' || !['home','paper'].includes(tab)){
+    paperLastActiveIds=null;
+    return;
+  }
+  const activeIds=paperActive().map(h=>String(h.id)).sort().join('|');
+  if(paperLastActiveIds===null){paperLastActiveIds=activeIds;return;}
+  if(activeIds!==paperLastActiveIds){paperLastActiveIds=activeIds;render();}
+},30000);
 
 
 const $=id=>document.getElementById(id);
@@ -578,8 +607,17 @@ function drawAssignment(){
  const answerIndex=q.answer==null?null:Number(q.answer);
  const answerKnown=Number.isInteger(answerIndex)&&answerIndex>=0&&answerIndex<q.options.length;
  const correctCount=review?qs.filter(x=>x.answer!=null&&Number(answerDraft[x.id])===Number(x.answer)).length:Object.values(opened.roundCorrect).filter(Boolean).length;
- const feedback=answered&&!review?(opened.roundCorrect[q.id]?'○':'×'):'';
- $('screen').innerHTML=`<div class="row"><h2>${esc(a.title)}</h2><button onclick="go('assignments')">戻る</button></div><p class="reading-progress">問題 ${i+1} / ${qs.length} ・ 回答済み ${qs.filter(x=>answerDraft[x.id]!==undefined).length}問 ・ 正解 ${correctCount}問 / ${qs.length}問</p><div class="${reading?'reading-card':'card'}">${reading?`<div class="reading-word">${esc(readingWord(q))}</div>`:`<h3>問題 ${i+1}</h3><p>${esc(q.prompt)}</p>`}<div class="quiz-answer-area">${feedback?`<span class="answer-mark ${opened.roundCorrect[q.id]?'answer-mark-good':'answer-mark-bad'}">${feedback}</span>`:''}</div><div class="${reading?'reading-options':''}">${q.options.map((o,j)=>`<button class="${reading?'reading-option':'option wide'} ${review&&answerKnown&&j===answerIndex?'correct-answer':''} ${review&&answerKnown&&Number(selected)===j&&j!==answerIndex?'wrong-answer':''} ${selected===j?'selected':''}" style="${!reading?'text-align:left;':''}" ${review||answered||opened.roundBusy?'disabled':''} onclick="chooseAssignmentAnswer(${j})">${esc(o)}${review&&answerKnown?(j===answerIndex?' ✓':Number(selected)===j?' ✕':''):''}</button>`).join('')}</div>${review?`<div class="status"><strong>正解：${esc(q.options[q.answer]??'未公開')}</strong><p>${esc(q.explanation||'')}</p></div>`:''}</div><div class="reading-navigation"><button ${i===0?'disabled':''} onclick="moveReadingCard(-1)">前へ</button>${i===qs.length-1?(review?'<button disabled>最後の問題</button>':`<button class="primary" onclick="submitNow()" ${!answered||opened.roundBusy?'disabled':''}>今回の結果を見る</button>`):`<button class="primary" onclick="moveReadingCard(1)" ${!review&&!answered?'disabled':''}>次の問題へ</button>`}</div>${!review&&i===qs.length-1?'<p class="mutedtext" style="text-align:center">1問につき選択は1回だけです。間違えても次へ進めます。全問正解できなかった場合は、最初からもう一度挑戦してください。</p>':''}`;
+ const isCorrect=answered&&(review?(answerKnown&&Number(selected)===answerIndex):opened.roundCorrect[q.id]===true);
+ const isWrong=answered&&!isCorrect;
+ const showCorrect=answerKnown&&(review||isWrong);
+ const optionHtml=q.options.map((o,j)=>{
+   const chosen=answered&&Number(selected)===j;
+   const good=chosen&&isCorrect||(showCorrect&&j===answerIndex);
+   const bad=chosen&&isWrong;
+   return `<button class="${reading?'reading-option':'option wide'} quiz-choice ${good?'quiz-choice-good':''} ${bad?'quiz-choice-bad':''} ${chosen?'quiz-choice-picked':''}" style="${!reading?'text-align:left;':''}" ${review||answered||opened.roundBusy?'disabled':''} onclick="chooseAssignmentAnswer(${j})"><span class="quiz-choice-label">${esc(o)}</span>${good?'<span class="quiz-choice-icon">✓</span>':bad?'<span class="quiz-choice-icon">✕</span>':''}</button>`;
+ }).join('');
+ const resultHint=isWrong?(showCorrect?`<div class="quiz-correction"><span>正しい答え</span><strong>${esc(q.options[answerIndex])}</strong></div>`:`<div class="quiz-correction quiz-correction-muted">不正解です。正解を取得できませんでした。もう一度ページを開いてください。</div>`):'';
+ $('screen').innerHTML=`<div class="row"><h2>${esc(a.title)}</h2><button onclick="go('assignments')">戻る</button></div><p class="reading-progress">問題 ${i+1} / ${qs.length} ・ 回答済み ${qs.filter(x=>answerDraft[x.id]!==undefined).length}問 ・ 正解 ${correctCount}問 / ${qs.length}問</p><div class="${reading?'reading-card':'card'} quiz-polished">${reading?`<div class="reading-word">${esc(readingWord(q))}</div>`:`<h3>問題 ${i+1}</h3><p>${esc(q.prompt)}</p>`}<div class="${reading?'reading-options':'quiz-options-standard'}">${optionHtml}</div>${resultHint}${review&&q.explanation?`<p class="quiz-explanation">${esc(q.explanation)}</p>`:''}</div><div class="reading-navigation"><button ${i===0?'disabled':''} onclick="moveReadingCard(-1)">前へ</button>${i===qs.length-1?(review?'<button disabled>最後の問題</button>':`<button class="primary" onclick="submitNow()" ${!answered||opened.roundBusy?'disabled':''}>今回の結果を見る</button>`):`<button class="primary" onclick="moveReadingCard(1)" ${!review&&!answered?'disabled':''}>次の問題へ</button>`}</div>${!review&&i===qs.length-1?'<p class="mutedtext" style="text-align:center">1問につき選択は1回だけです。間違えても次へ進めます。全問正解できなかった場合は、最初からもう一度挑戦してください。</p>':''}`;
 }
 function drawReadingCard(){drawAssignment()}
 async function chooseAssignmentAnswer(j){
@@ -591,6 +629,16 @@ async function chooseAssignmentAnswer(j){
   if(r.error)throw r.error;
   if(opened!==round)return;
   answerDraft[q.id]=j;round.roundCorrect[q.id]=r.data===true;
+  if(r.data===false){
+   // 回答済みの問題に限り、正解番号を安全なRPCから取得する。
+   try{
+    const correction=await sb.rpc('get_answer_after_attempt',{p_assignment:round.a.id,p_question:q.id,p_attempt_token:round.roundToken});
+    if(!correction.error&&opened===round&&Number.isInteger(Number(correction.data))){
+     const n=Number(correction.data);
+     if(n>=0&&n<q.options.length)q.answer=n;
+    }else if(correction.error){console.warn('正解取得に失敗:',correction.error)}
+   }catch(correctionError){console.warn('正解取得に失敗:',correctionError)}
+  }
  }catch(e){warn(e)}finally{round.roundBusy=false;if(opened===round)drawAssignment()}
 }
 function chooseReadingCard(j){chooseAssignmentAnswer(j)}

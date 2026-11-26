@@ -939,11 +939,14 @@ async function manageSaveChoice(id){
  if(!r.data?.length)return alert('課題名・締切を更新できません。Supabaseの権限を確認してください。');
  manageChoiceDraft=null;await refresh();alert('変更を保存しました');
 }
-function manageSubmissions(type,id){
+async function manageSubmissions(type,id){
  if(type==='written'){go('written');writtenResults(id);return;}
  const a=assignments.find(x=>x.id===id);if(!a)return;
  const enrolled=students.filter(st=>members.some(m=>m.student_id===st.id&&String(m.class_id)===String(a.class_id)));
- manageShow(`<h3>${esc(a.title)}｜提出状況</h3><p class="mutedtext">提出された回答は締切前でも教師が確認できます。学生への正解公開設定は変更されません。</p>${enrolled.map(st=>{const r=submissions.find(x=>String(x.assignment_id)===String(id)&&String(x.student_id)===String(st.id));return `<div class="row" style="padding:10px 0;border-bottom:1px solid #eee"><strong>${esc(st.full_name)}</strong><div class="stack" style="align-items:center"><span>${r?`${esc(r.score)}点・提出済み`:'未完成'}</span>${r?`<button class="compact primary" onclick="manageStudentAnswers('${id}','${st.id}')">回答を見る</button>`:''}</div></div>`}).join('')||'<p>対象学生はいません。</p>'}`);
+ manageShow(`<h3>${esc(a.title)}｜提出状況</h3><p>挑戦回数を読み込んでいます…</p>`);
+ const rounds=await sb.rpc('teacher_assignment_attempt_counts',{p_assignment:id});
+ const counts=new Map((rounds.data||[]).map(x=>[String(x.student_id),Number(x.attempts)]));
+ manageShow(`<h3>${esc(a.title)}｜提出状況</h3><p class="mutedtext">提出された回答は締切前でも教師が確認できます。学生への正解公開設定は変更されません。</p>${enrolled.map(st=>{const r=submissions.find(x=>String(x.assignment_id)===String(id)&&String(x.student_id)===String(st.id));return `<div class="row" style="padding:10px 0;border-bottom:1px solid #eee"><strong>${esc(st.full_name)}</strong><div class="stack" style="align-items:center"><span>${rounds.error?'':counts.has(String(st.id))?`${counts.get(String(st.id))}回挑戦・`:''}${r?'完了':rounds.error?'未完成':counts.has(String(st.id))?'未完成':'未着手'}${rounds.error?'（回数取得不可）':r&&!counts.has(String(st.id))?'（回数記録なし）':''}</span>${r?`<button class="compact primary" onclick="manageStudentAnswers('${id}','${st.id}')">回答を見る</button>`:''}</div></div>`}).join('')||'<p>対象学生はいません。</p>'}`);
 }
 async function manageStudentAnswers(assignmentId,studentId){
  if(!['admin','teacher'].includes(profile?.role))return;
@@ -967,7 +970,7 @@ async function manageStudentAnswers(assignmentId,studentId){
   const correct=known&&valid&&chosen===q.answer;
   return `<div class="written-item"><div class="row"><strong>問題 ${i+1}｜${esc(q.prompt)}</strong><span class="pill ${!hasAnswer?'warn':known&&correct?'ok':known?'warn':''}">${!hasAnswer?'未回答':!known?'判定不可':correct?'✓ 正解':'✕ 不正解'}</span></div><p>学生の回答：<strong>${esc(valid?opts[chosen]:hasAnswer?String(raw):'（未回答）')}</strong></p><p>正解：<strong>${esc(known?opts[q.answer]:'正解データなし')}</strong></p>${q.explanation?`<p class="mutedtext">${esc(String(q.explanation).replace(/^\[(READING_CARD|MEANING_CHOICE|CONTEXT_CHOICE)\]\s*/,''))}</p>`:''}</div>`;
  }).join('');
- manageShow(`<div class="row"><h3>${esc(st?.full_name||'学生')}｜${esc(a.title)}</h3><button onclick="manageSubmissions('choice','${assignmentId}')">提出一覧に戻る</button></div><p><strong>得点：${esc(submission.score)}点</strong> ／ ${qs.length}問</p>${submission.submitted_at||submission.created_at?`<p class="mutedtext">提出日時：${fmt(submission.submitted_at||submission.created_at)}</p>`:''}${detail||'<p>問題がありません。</p>'}`);
+ manageShow(`<div class="row"><h3>${esc(st?.full_name||'学生')}｜${esc(a.title)}</h3><button onclick="manageSubmissions('choice','${assignmentId}')">提出一覧に戻る</button></div><p>完了 ／ ${qs.length}問</p>${submission.submitted_at||submission.created_at?`<p class="mutedtext">提出日時：${fmt(submission.submitted_at||submission.created_at)}</p>`:''}${detail||'<p>問題がありません。</p>'}`);
 }
 
 async function manageDelete(type,id){
